@@ -2,7 +2,7 @@
 
 ## System Overview
 
-CP'S Enterprise DCS follows a three-tier agentic architecture where autonomous agents operate at local, regional, and global levels. Each tier has distinct responsibilities and communicates via gRPC with Protocol Buffers.
+CPS Enterprise DCS follows a three-tier agentic architecture where autonomous agents operate at local, regional, and global levels. Each tier has distinct responsibilities and communicates via gRPC with Protocol Buffers.
 
 ```
                     ┌───────────────────────┐

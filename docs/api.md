@@ -2,7 +2,7 @@
 
 ## Overview
 
-CP'S Enterprise DCS uses **gRPC** with **Protocol Buffers** for all inter-service communication. The service definitions are in [`cps-enterprise-dcs/proto/cps_enterprise_v4.proto`](../cps-enterprise-dcs/proto/cps_enterprise_v4.proto).
+CPS Enterprise DCS uses **gRPC** with **Protocol Buffers** for all inter-service communication. The service definitions are in [`cps-enterprise-dcs/proto/cps_enterprise_v4.proto`](../cps-enterprise-dcs/proto/cps_enterprise_v4.proto).
 
 ---
 

@@ -2,7 +2,7 @@
 
 ## نظرة عامة
 
-يستخدم نظام CP'S Enterprise DCS تقنية **gRPC** مع **Protocol Buffers** لجميع الاتصالات بين الخدمات. تعريفات الخدمات موجودة في [`cps-enterprise-dcs/proto/cps_enterprise_v4.proto`](../cps-enterprise-dcs/proto/cps_enterprise_v4.proto).
+يستخدم نظام CPS Enterprise DCS تقنية **gRPC** مع **Protocol Buffers** لجميع الاتصالات بين الخدمات. تعريفات الخدمات موجودة في [`cps-enterprise-dcs/proto/cps_enterprise_v4.proto`](../cps-enterprise-dcs/proto/cps_enterprise_v4.proto).
 
 ---
 

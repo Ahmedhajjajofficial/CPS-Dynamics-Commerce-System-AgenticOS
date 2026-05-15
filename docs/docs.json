@@ -39,6 +39,10 @@
     {
       "name": "AgenticOS Guidelines",
       "url": "agentic-os"
+    },
+    {
+      "name": "Changelog",
+      "url": "changelog"
     }
   ],
   "navigation": [
@@ -84,6 +88,12 @@
         "api/endpoints",
         "api/webhooks",
         "api/rate-limits"
+      ]
+    },
+    {
+      "group": "Changelog",
+      "pages": [
+        "changelog/2026-05-15"
       ]
     }
   ],

@@ -2,7 +2,9 @@
 
 ## نظرة عامة
 
-يستخدم نظام CPS Enterprise DCS تقنية **gRPC** مع **Protocol Buffers** لجميع الاتصالات بين الخدمات. تعريفات الخدمات موجودة في [`cps-enterprise-dcs/proto/cps_enterprise_v4.proto`](../cps-enterprise-dcs/proto/cps_enterprise_v4.proto).
+يستخدم نظام CPS Enterprise DCS تقنية **gRPC** مع **Protocol Buffers** لجميع الاتصالات بين الخدمات. تعريفات الخدمات موجودة في `cps-enterprise-dcs/proto/cps_enterprise_v4.proto`.
+
+{/* TODO: Restore link to the proto file once its canonical location is confirmed (e.g. a GitHub permalink in the AgenticOS repo). The previous relative path `../cps-enterprise-dcs/proto/cps_enterprise_v4.proto` resolved outside the docs tree and 404'd. */}
 
 ---
 

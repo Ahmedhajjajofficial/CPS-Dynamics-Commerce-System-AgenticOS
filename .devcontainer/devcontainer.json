@@ -65,7 +65,7 @@
   "containerEnv": {
     "PYTHONPATH": "${containerWorkspaceFolder}/cps-enterprise-dcs/local-agent",
     "DCS_ENV": "development",
-    "GOPRIVATE": "github.com/Ahmedhajjajofficial/*"
+    "GOPRIVATE": "github.com/CP-S-Enterprise-Dynamics/*"
   },
   "forwardPorts": [
     3000,

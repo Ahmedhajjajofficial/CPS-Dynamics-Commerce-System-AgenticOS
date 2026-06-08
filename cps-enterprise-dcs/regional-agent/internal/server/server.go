@@ -2,6 +2,7 @@ package server
 
 import (
 	"net"
+	"os"
 
 	"github.com/cps-enterprise/dcs/regional-agent/internal/agent"
 	pb "github.com/cps-enterprise/dcs/regional-agent/internal/proto"
@@ -29,8 +30,10 @@ func New(a *agent.RegionalAgent, logger *zap.Logger) *Server {
 	pb.RegisterAccountingSwarmProtocolServer(s.grpcServer, &SwarmHandler{server: s})
 	pb.RegisterQueryProtocolServer(s.grpcServer, &QueryHandler{server: s})
 
-	// Enable reflection for debugging
-	reflection.Register(s.grpcServer)
+	// Only enable gRPC reflection in development (exposes full API surface)
+	if os.Getenv("DCS_ENV") != "production" {
+		reflection.Register(s.grpcServer)
+	}
 
 	return s
 }

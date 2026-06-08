@@ -11,11 +11,14 @@ Services:
 from __future__ import annotations
 
 import asyncio
+import logging
 from concurrent import futures
 from typing import AsyncIterator
 import grpc
 from datetime import datetime
 from google.protobuf import timestamp_pb2
+
+logger = logging.getLogger("gRPCServer")
 
 # Import generated protobuf code
 from .proto import cps_enterprise_v4_pb2 as pb2
@@ -61,8 +64,10 @@ class AccountingSwarmServicer(pb2_grpc.AccountingSwarmProtocolServicer):
             )
         except Exception as e:
             context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(str(e))
-            return pb2.AckResponse(success=False, message=str(e))
+            context.set_details("Internal processing error")
+            import logging
+            logging.getLogger("gRPC").error("BroadcastFinancialEvent failed: %s", e)
+            return pb2.AckResponse(success=False, message="Internal processing error")
     
     async def SubscribeEvents(self, request: pb2.SubscribeRequest, context: grpc.aio.ServicerContext) -> AsyncIterator[pb2.SovereignFinancialEvent]:
         """Stream events to subscriber."""
@@ -129,42 +134,59 @@ class QueryServicer(pb2_grpc.QueryProtocolServicer):
     
     async def GetBranchSummary(self, request: pb2.BranchQuery, context: grpc.aio.ServicerContext) -> pb2.BranchSummary:
         """Get branch summary."""
-        summary = await self.agent.get_branch_summary()
-        return pb2.BranchSummary(
-            branch_id=summary["branch_id"],
-            today_sales=summary["today_sales"],
-            today_transactions=0,
-            current_balance=0.0,
-            active_sessions=0
-        )
+        try:
+            summary = await self.agent.get_branch_summary()
+            return pb2.BranchSummary(
+                branch_id=summary["branch_id"],
+                today_sales=summary["today_sales"],
+                today_transactions=0,
+                current_balance=0.0,
+                active_sessions=0
+            )
+        except Exception as e:
+            logger.error("GetBranchSummary failed: %s", e, exc_info=True)
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Failed to get branch summary: {e}")
+            return pb2.BranchSummary()
     
     async def GetInventoryStatus(self, request: pb2.InventoryQuery, context: grpc.aio.ServicerContext) -> pb2.InventoryStatus:
         """Get inventory status."""
-        product_id = request.product_id
-        quantity = self.agent.get_inventory_level(product_id)
-        
-        return pb2.InventoryStatus(
-            product_id=product_id,
-            branch_id=self.agent.config.branch_id,
-            current_quantity=quantity,
-            available_quantity=quantity,
-            is_low_stock=quantity < 10
-        )
+        try:
+            product_id = request.product_id
+            quantity = self.agent.get_inventory_level(product_id)
+            
+            return pb2.InventoryStatus(
+                product_id=product_id,
+                branch_id=self.agent.config.branch_id,
+                current_quantity=quantity,
+                available_quantity=quantity,
+                is_low_stock=quantity < 10
+            )
+        except Exception as e:
+            logger.error("GetInventoryStatus failed: %s", e, exc_info=True)
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Failed to get inventory status: {e}")
+            return pb2.InventoryStatus()
     
     async def SubscribeDashboard(self, request: pb2.DashboardSubscription, context: grpc.aio.ServicerContext) -> AsyncIterator[pb2.DashboardUpdate]:
         """Stream dashboard updates."""
-        while True:
-            summary = await self.agent.get_branch_summary()
-            
-            ts = timestamp_pb2.Timestamp()
-            ts.GetCurrentTime()
-            
-            yield pb2.DashboardUpdate(
-                metric_name="today_sales",
-                value=summary["today_sales"],
-                display_value=f"${summary['today_sales']:.2f}",
-                timestamp=ts
-            )
+        while not context.cancelled():
+            try:
+                summary = await self.agent.get_branch_summary()
+                
+                ts = timestamp_pb2.Timestamp()
+                ts.GetCurrentTime()
+                
+                yield pb2.DashboardUpdate(
+                    metric_name="today_sales",
+                    value=summary["today_sales"],
+                    display_value=f"${summary['today_sales']:.2f}",
+                    timestamp=ts
+                )
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error("SubscribeDashboard iteration failed: %s", e, exc_info=True)
             
             await asyncio.sleep(request.update_interval_ms / 1000.0)
 

@@ -15,6 +15,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -264,8 +265,13 @@ func (a *RegionalAgent) initRaft() error {
 				},
 			},
 		}
-		r.BootstrapCluster(configuration)
-		a.logger.Info("Bootstrapped Raft cluster")
+		if future := r.BootstrapCluster(configuration); future.Error() != nil {
+			a.logger.Warn("Raft bootstrap returned error (may already be bootstrapped)",
+				zap.Error(future.Error()),
+			)
+		} else {
+			a.logger.Info("Bootstrapped Raft cluster")
+		}
 	}
 
 	return nil
@@ -496,15 +502,45 @@ func (f *FSM) Snapshot() (raft.FSMSnapshot, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
-	// TODO: Create snapshot
-	return nil, nil
+	data := make(map[string]interface{}, len(f.data))
+	for k, v := range f.data {
+		data[k] = v
+	}
+
+	buf, err := json.Marshal(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal FSM snapshot: %w", err)
+	}
+
+	return &fsmSnapshot{data: buf}, nil
 }
 
 // Restore restores the FSM from a snapshot
 func (f *FSM) Restore(rc io.ReadCloser) error {
+	defer rc.Close()
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	// TODO: Restore from snapshot
+	var data map[string]interface{}
+	if err := json.NewDecoder(rc).Decode(&data); err != nil {
+		return fmt.Errorf("failed to decode FSM snapshot: %w", err)
+	}
+	f.data = data
+	f.logger.Info("FSM restored from snapshot", zap.Int("keys", len(data)))
 	return nil
 }
+
+// fsmSnapshot implements raft.FSMSnapshot
+type fsmSnapshot struct {
+	data []byte
+}
+
+func (s *fsmSnapshot) Persist(sink raft.SnapshotSink) error {
+	if _, err := sink.Write(s.data); err != nil {
+		sink.Cancel()
+		return fmt.Errorf("failed to write snapshot: %w", err)
+	}
+	return sink.Close()
+}
+
+func (s *fsmSnapshot) Release() {}

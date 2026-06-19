@@ -20,4 +20,13 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  // shadcn/ui components intentionally export both components and variant
+  // helpers (e.g. buttonVariants, badgeVariants). Suppress the react-refresh
+  // rule that flags mixed exports in these generated files.
+  {
+    files: ['src/components/ui/**/*.{ts,tsx}'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ])

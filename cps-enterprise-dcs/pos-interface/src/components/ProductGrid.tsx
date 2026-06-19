@@ -8,6 +8,7 @@ import React, { useState, useMemo } from 'react';
 import { Search, Grid3X3, List } from 'lucide-react';
 import { Product } from '../types';
 import { useCartStore } from '../store/cartStore';
+import { formatCurrency } from '../utils/currency';
 
 interface ProductGridProps {
   products: Product[];
@@ -126,7 +127,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                 )}
                 <h3 className="font-medium text-sm line-clamp-2">{product.name}</h3>
                 <p className="text-gray-500 text-xs">{product.sku}</p>
-                <p className="text-blue-600 font-bold mt-auto">${product.price.toFixed(2)}</p>
+                <p className="text-blue-600 font-bold mt-auto">{formatCurrency(product.price)}</p>
                 {product.stockQuantity < 10 && (
                   <span className="text-xs text-red-500 mt-1">
                     Only {product.stockQuantity} left
@@ -155,7 +156,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                   <p className="text-gray-500 text-sm">{product.sku} • {product.category}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-blue-600 font-bold">${product.price.toFixed(2)}</p>
+                  <p className="text-blue-600 font-bold">{formatCurrency(product.price)}</p>
                   <p className="text-xs text-gray-500">Stock: {product.stockQuantity}</p>
                 </div>
               </button>

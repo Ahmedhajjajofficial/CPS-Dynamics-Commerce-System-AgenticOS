@@ -33,6 +33,16 @@ import base64
 import json
 
 
+def _b64_encode(value: Optional[bytes]) -> Optional[str]:
+    """Base64-encode bytes, returning None for None inputs."""
+    return base64.b64encode(value).decode() if value is not None else None
+
+
+def _b64_decode(value: Optional[str]) -> Optional[bytes]:
+    """Base64-decode a string, returning None for None/missing inputs."""
+    return base64.b64decode(value) if value else None
+
+
 @dataclass
 class EncryptedPayload:
     """Encrypted payload with all necessary metadata."""
@@ -48,34 +58,38 @@ class EncryptedPayload:
     compliance_proof: Optional[bytes] = None
     audit_trail_hash: Optional[str] = None
     
+    # Fields that are always base64-encoded in serialized form
+    _B64_REQUIRED_FIELDS = ("encrypted_data", "encrypted_dek", "iv", "auth_tag")
+    _B64_OPTIONAL_FIELDS = ("encrypted_inner_layer", "compliance_proof")
+    
     def to_dict(self) -> Dict[str, Any]:
-        return {
-            "encrypted_data": base64.b64encode(self.encrypted_data).decode(),
-            "encrypted_dek": base64.b64encode(self.encrypted_dek).decode(),
+        result: Dict[str, Any] = {}
+        for field_name in self._B64_REQUIRED_FIELDS:
+            result[field_name] = _b64_encode(getattr(self, field_name))
+        for field_name in self._B64_OPTIONAL_FIELDS:
+            result[field_name] = _b64_encode(getattr(self, field_name))
+        result.update({
             "kms_key_id": self.kms_key_id,
-            "iv": base64.b64encode(self.iv).decode(),
-            "auth_tag": base64.b64encode(self.auth_tag).decode(),
             "hmac_signature": self.hmac_signature,
             "schema_version": self.schema_version,
-            "encrypted_inner_layer": base64.b64encode(self.encrypted_inner_layer).decode() if self.encrypted_inner_layer else None,
             "inner_key_derivation": self.inner_key_derivation,
-            "compliance_proof": base64.b64encode(self.compliance_proof).decode() if self.compliance_proof else None,
-            "audit_trail_hash": self.audit_trail_hash
-        }
+            "audit_trail_hash": self.audit_trail_hash,
+        })
+        return result
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'EncryptedPayload':
+        decoded: Dict[str, Any] = {}
+        for field_name in cls._B64_REQUIRED_FIELDS:
+            decoded[field_name] = base64.b64decode(data[field_name])
+        for field_name in cls._B64_OPTIONAL_FIELDS:
+            decoded[field_name] = _b64_decode(data.get(field_name))
         return cls(
-            encrypted_data=base64.b64decode(data["encrypted_data"]),
-            encrypted_dek=base64.b64decode(data["encrypted_dek"]),
+            **decoded,
             kms_key_id=data["kms_key_id"],
-            iv=base64.b64decode(data["iv"]),
-            auth_tag=base64.b64decode(data["auth_tag"]),
             hmac_signature=data["hmac_signature"],
             schema_version=data.get("schema_version", 1),
-            encrypted_inner_layer=base64.b64decode(data["encrypted_inner_layer"]) if data.get("encrypted_inner_layer") else None,
             inner_key_derivation=data.get("inner_key_derivation"),
-            compliance_proof=base64.b64decode(data["compliance_proof"]) if data.get("compliance_proof") else None,
             audit_trail_hash=data.get("audit_trail_hash")
         )
     
@@ -112,26 +126,31 @@ class CryptoManager:
         
         self._keks: Dict[str, bytes] = {}  # Key Encryption Keys
         self._key_versions: Dict[str, int] = {}
+        self._kek_salts: Dict[str, bytes] = {}
         self._initialize_keks()
     
     def _initialize_keks(self):
         """Initialize default KEKs."""
-        # Create default KEK
-        default_kek = self._derive_kek("default", self._master_key)
+        # Create default KEK with random salt
+        default_salt = os.urandom(16)
+        default_kek = self._derive_kek("default", self._master_key, default_salt)
         self._keks["default"] = default_kek
+        self._kek_salts["default"] = default_salt
         self._key_versions["default"] = 1
         
         # Create compliance KEK for sensitive data
-        compliance_kek = self._derive_kek("compliance", self._master_key)
+        compliance_salt = os.urandom(16)
+        compliance_kek = self._derive_kek("compliance", self._master_key, compliance_salt)
         self._keks["compliance"] = compliance_kek
+        self._kek_salts["compliance"] = compliance_salt
         self._key_versions["compliance"] = 1
     
-    def _derive_kek(self, key_id: str, master_key: bytes) -> bytes:
-        """Derive a KEK from the master key."""
+    def _derive_kek(self, key_id: str, master_key: bytes, salt: bytes) -> bytes:
+        """Derive a KEK from the master key using a random salt."""
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA512(),
             length=32,
-            salt=key_id.encode(),
+            salt=salt,
             iterations=100000,
             backend=default_backend()
         )
@@ -332,16 +351,24 @@ class CryptoManager:
         )
     
     def verify(self, data: bytes, signature: bytes, public_key_pem: bytes) -> bool:
-        """Verify ECDSA signature."""
+        """Verify ECDSA signature.
+
+        Returns False only when the signature is cryptographically
+        invalid.  All other errors (bad key format, wrong algorithm,
+        etc.) are re-raised so callers can distinguish "invalid
+        signature" from "something is broken".
+        """
+        from cryptography.exceptions import InvalidSignature
+
+        public_key = serialization.load_pem_public_key(
+            public_key_pem,
+            backend=default_backend()
+        )
+
         try:
-            public_key = serialization.load_pem_public_key(
-                public_key_pem,
-                backend=default_backend()
-            )
-            
             public_key.verify(signature, data, ec.ECDSA(hashes.SHA256()))
             return True
-        except Exception:
+        except InvalidSignature:
             return False
 
 

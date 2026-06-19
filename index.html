@@ -51,11 +51,24 @@
         }
 
         .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
             font-size: 1.5rem;
             font-weight: 700;
             color: var(--primary-cyan);
             text-decoration: none;
             letter-spacing: 1px;
+        }
+
+        .logo img {
+            height: 40px;
+            width: 40px;
+            transition: transform 0.3s ease;
+        }
+
+        .logo:hover img {
+            transform: scale(1.1);
         }
 
         .nav-links a {
@@ -167,7 +180,10 @@
     <div class="background-glow"></div>
     
     <nav>
-        <a href="#" class="logo">CPS ENTERPRISE DCS</a>
+        <a href="#" class="logo">
+            <img src="docs/assets/logo.png" alt="CPS Logo">
+            <span>CPS ENTERPRISE DCS</span>
+        </a>
         <div class="nav-links">
             <a href="docs/architecture.md">المعمارية</a>
             <a href="docs/api.md">الواجهة البرمجية</a>

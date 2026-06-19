@@ -8,6 +8,7 @@ import React, { useState } from 'react';
 import { Minus, Plus, Trash2, User, Tag, Receipt, CreditCard } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { useSessionStore } from '../store/sessionStore';
+import { formatCurrency, calculateItemTotal, calculateCartDiscountAmount } from '../utils/currency';
 
 export const Cart: React.FC = () => {
   const { 
@@ -26,7 +27,7 @@ export const Cart: React.FC = () => {
   const handleCheckout = () => {
     if (cart.items.length === 0) return;
     // TODO: Navigate to payment screen
-    alert('Checkout - Total: $' + cart.total.toFixed(2));
+    alert('Checkout - Total: ' + formatCurrency(cart.total));
   };
 
   const handleItemDiscount = (productId: string) => {
@@ -81,7 +82,7 @@ export const Cart: React.FC = () => {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <h4 className="font-medium">{item.product.name}</h4>
-                    <p className="text-sm text-gray-500">${item.product.price.toFixed(2)} each</p>
+                    <p className="text-sm text-gray-500">{formatCurrency(item.product.price)} each</p>
                     {item.notes && (
                       <p className="text-xs text-gray-400 mt-1">{item.notes}</p>
                     )}
@@ -124,7 +125,7 @@ export const Cart: React.FC = () => {
                       {item.discount > 0 && `${item.discount}%`}
                     </button>
                     <span className="font-bold">
-                      ${(item.product.price * item.quantity * (1 - item.discount / 100)).toFixed(2)}
+                      {formatCurrency(calculateItemTotal(item))}
                     </span>
                   </div>
                 </div>
@@ -140,27 +141,27 @@ export const Cart: React.FC = () => {
           {/* Subtotal */}
           <div className="flex justify-between text-sm mb-1">
             <span className="text-gray-600">Subtotal</span>
-            <span>${cart.subtotal.toFixed(2)}</span>
+            <span>{formatCurrency(cart.subtotal)}</span>
           </div>
 
           {/* Cart Discount */}
           {cart.discount > 0 && (
             <div className="flex justify-between text-sm mb-1 text-green-600">
               <span>Cart Discount ({cart.discount}%)</span>
-              <span>-${(cart.subtotal * cart.discount / 100).toFixed(2)}</span>
+              <span>-{formatCurrency(calculateCartDiscountAmount(cart.subtotal, cart.discount))}</span>
             </div>
           )}
 
           {/* Tax */}
           <div className="flex justify-between text-sm mb-2">
             <span className="text-gray-600">Tax</span>
-            <span>${cart.taxAmount.toFixed(2)}</span>
+            <span>{formatCurrency(cart.taxAmount)}</span>
           </div>
 
           {/* Total */}
           <div className="flex justify-between text-xl font-bold mb-4">
             <span>Total</span>
-            <span className="text-blue-600">${cart.total.toFixed(2)}</span>
+            <span className="text-blue-600">{formatCurrency(cart.total)}</span>
           </div>
 
           {/* Checkout Button */}

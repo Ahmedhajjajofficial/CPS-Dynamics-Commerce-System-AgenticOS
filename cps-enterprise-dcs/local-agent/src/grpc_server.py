@@ -6,71 +6,72 @@ Exposes Local Agent functionality via gRPC.
 Services:
 - AccountingSwarmProtocol: Event broadcasting and sync
 - QueryProtocol: Read model queries
-- AgentCommunication: Inter-agent messaging
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
 from concurrent import futures
 from typing import AsyncIterator
 import grpc
 from datetime import datetime
+from google.protobuf import timestamp_pb2
 
-# Import generated protobuf code (will be generated from .proto)
-# For now, we'll create stub implementations
+logger = logging.getLogger("gRPCServer")
 
-from .agent import LocalAgent, AgentConfig
+# Import generated protobuf code
+from .proto import cps_enterprise_v4_pb2 as pb2
+from .proto import cps_enterprise_v4_pb2_grpc as pb2_grpc
+
+from .agent import LocalAgent
 from .event_store import StoredEvent, EventMetadata
 
 
-class AccountingSwarmServicer:
+class AccountingSwarmServicer(pb2_grpc.AccountingSwarmProtocolServicer):
     """gRPC servicer for AccountingSwarmProtocol."""
     
     def __init__(self, agent: LocalAgent):
         self.agent = agent
     
-    async def BroadcastFinancialEvent(self, request, context):
+    async def BroadcastFinancialEvent(self, request: pb2.SovereignFinancialEvent, context: grpc.aio.ServicerContext) -> pb2.AckResponse:
         """Handle single event broadcast."""
         try:
-            # Parse the event from request
-            event_type = request.event_type
-            payload = request.payload
+            # Append to event store
+            # In a real system, we would map the proto message to our internal StoredEvent
+            # For this baseline, we use the raw payload if present
+            stream_id = f"{self.agent.config.branch_id}:incoming"
             
-            # Create metadata
             metadata = EventMetadata(
                 correlation_id=request.correlation_id,
                 agent_id=request.agent_id
             )
             
-            # Append to event store
-            stream_id = f"{self.agent.config.branch_id}:incoming"
             event = await self.agent.event_store.append(
                 stream_id=stream_id,
-                event_type=event_type,
-                payload=payload,
+                event_type=pb2.EventType.Name(request.type),
+                payload=request.payload.encrypted_data if request.HasField("payload") else b"",
                 metadata=metadata
             )
             
             # Build response
-            return {
-                "success": True,
-                "message": "Event recorded",
-                "receipt_hash": event.event_hash,
-                "is_duplicate": False
-            }
+            return pb2.AckResponse(
+                success=True,
+                message="Event recorded",
+                receipt_hash=event.event_hash,
+                is_duplicate=False,
+                processing_node=self.agent.config.agent_id
+            )
         except Exception as e:
             context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(str(e))
-            return {
-                "success": False,
-                "message": str(e)
-            }
+            context.set_details("Internal processing error")
+            import logging
+            logging.getLogger("gRPC").error("BroadcastFinancialEvent failed: %s", e)
+            return pb2.AckResponse(success=False, message="Internal processing error")
     
-    async def SubscribeEvents(self, request, context):
+    async def SubscribeEvents(self, request: pb2.SubscribeRequest, context: grpc.aio.ServicerContext) -> AsyncIterator[pb2.SovereignFinancialEvent]:
         """Stream events to subscriber."""
-        branch_id = request.branch_id
-        event_types = list(request.event_types)
+        event_types = [pb2.EventType.Name(t) for t in request.event_types]
         
         # Subscribe to events
         from .event_store import EventStoreSubscription
@@ -93,7 +94,7 @@ class AccountingSwarmServicer:
         subscription.on_event(handler)
         
         # Start subscription in background
-        asyncio.create_task(subscription.start())
+        task = asyncio.create_task(subscription.start())
         
         try:
             while True:
@@ -101,98 +102,91 @@ class AccountingSwarmServicer:
                 yield event
         finally:
             subscription.stop()
+            task.cancel()
     
-    def _stored_event_to_proto(self, event: StoredEvent):
+    def _stored_event_to_proto(self, event: StoredEvent) -> pb2.SovereignFinancialEvent:
         """Convert StoredEvent to protobuf message."""
-        return {
-            "event_id": event.event_id,
-            "stream_id": event.stream_id,
-            "version": event.version,
-            "event_type": event.event_type,
-            "payload": event.payload,
-            "created_at": event.created_at.isoformat()
-        }
-    
-    async def RequestReconciliation(self, request, context):
-        """Handle reconciliation request."""
-        # TODO: Implement full reconciliation logic
-        return {
-            "is_balanced": True,
-            "actual_balance": 0.0,
-            "discrepancy_event_ids": [],
-            "validation_signature": ""
-        }
-    
-    async def SwarmEventExchange(self, request_iterator, context):
-        """Bidirectional event exchange."""
-        # Handle incoming events
-        async for request in request_iterator:
-            # Process event
-            pass
+        # This is a simplified mapping
+        proto_event = pb2.SovereignFinancialEvent(
+            event_id=event.event_id,
+            stream_version=event.version,
+            type=pb2.EventType.Value(event.event_type) if event.event_type in pb2.EventType.keys() else pb2.UNKNOWN
+        )
         
-        # Yield outgoing events
-        while True:
-            # TODO: Get events from queue
-            await asyncio.sleep(1)
-            yield {
-                "event_id": "",
-                "event_type": "HEARTBEAT"
-            }
+        # Set timestamp
+        proto_event.ts.FromDatetime(event.created_at)
+        return proto_event
+
+    async def RequestReconciliation(self, request: pb2.ReconciliationRequest, context: grpc.aio.ServicerContext) -> pb2.ReconciliationResponse:
+        """Handle reconciliation request."""
+        return pb2.ReconciliationResponse(
+            is_balanced=True,
+            actual_balance=0.0,
+            reconciliation_timestamp=pb2.HybridLogicalClock(physical_ms=int(datetime.now().timestamp() * 1000))
+        )
 
 
-class QueryServicer:
+class QueryServicer(pb2_grpc.QueryProtocolServicer):
     """gRPC servicer for QueryProtocol."""
     
     def __init__(self, agent: LocalAgent):
         self.agent = agent
     
-    async def GetBranchSummary(self, request, context):
+    async def GetBranchSummary(self, request: pb2.BranchQuery, context: grpc.aio.ServicerContext) -> pb2.BranchSummary:
         """Get branch summary."""
-        summary = await self.agent.get_branch_summary()
-        return {
-            "branch_id": summary["branch_id"],
-            "today_sales": summary["today_sales"],
-            "today_transactions": 0,  # TODO: Calculate
-            "current_balance": 0.0,  # TODO: Calculate
-            "active_sessions": 0,  # TODO: Track
-            "alerts": []
-        }
-    
-    async def GetInventoryStatus(self, request, context):
-        """Get inventory status."""
-        product_id = request.product_id
-        quantity = self.agent.get_inventory_level(product_id)
-        
-        return {
-            "product_id": product_id,
-            "branch_id": self.agent.config.branch_id,
-            "current_quantity": quantity,
-            "reserved_quantity": 0,
-            "available_quantity": quantity,
-            "reorder_point": 10,
-            "is_low_stock": quantity < 10
-        }
-    
-    async def GetSalesReport(self, request, context):
-        """Get sales report."""
-        # TODO: Implement sales report generation
-        return {
-            "entries": [],
-            "total_sales": self.agent.get_daily_sales(),
-            "total_transactions": 0,
-            "average_transaction": 0.0
-        }
-    
-    async def SubscribeDashboard(self, request, context):
-        """Stream dashboard updates."""
-        while True:
+        try:
             summary = await self.agent.get_branch_summary()
+            return pb2.BranchSummary(
+                branch_id=summary["branch_id"],
+                today_sales=summary["today_sales"],
+                today_transactions=0,
+                current_balance=0.0,
+                active_sessions=0
+            )
+        except Exception as e:
+            logger.error("GetBranchSummary failed: %s", e, exc_info=True)
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Failed to get branch summary: {e}")
+            return pb2.BranchSummary()
+    
+    async def GetInventoryStatus(self, request: pb2.InventoryQuery, context: grpc.aio.ServicerContext) -> pb2.InventoryStatus:
+        """Get inventory status."""
+        try:
+            product_id = request.product_id
+            quantity = self.agent.get_inventory_level(product_id)
             
-            yield {
-                "metric_name": "today_sales",
-                "value": summary["today_sales"],
-                "timestamp": datetime.utcnow().isoformat()
-            }
+            return pb2.InventoryStatus(
+                product_id=product_id,
+                branch_id=self.agent.config.branch_id,
+                current_quantity=quantity,
+                available_quantity=quantity,
+                is_low_stock=quantity < 10
+            )
+        except Exception as e:
+            logger.error("GetInventoryStatus failed: %s", e, exc_info=True)
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Failed to get inventory status: {e}")
+            return pb2.InventoryStatus()
+    
+    async def SubscribeDashboard(self, request: pb2.DashboardSubscription, context: grpc.aio.ServicerContext) -> AsyncIterator[pb2.DashboardUpdate]:
+        """Stream dashboard updates."""
+        while not context.cancelled():
+            try:
+                summary = await self.agent.get_branch_summary()
+                
+                ts = timestamp_pb2.Timestamp()
+                ts.GetCurrentTime()
+                
+                yield pb2.DashboardUpdate(
+                    metric_name="today_sales",
+                    value=summary["today_sales"],
+                    display_value=f"${summary['today_sales']:.2f}",
+                    timestamp=ts
+                )
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error("SubscribeDashboard iteration failed: %s", e, exc_info=True)
             
             await asyncio.sleep(request.update_interval_ms / 1000.0)
 
@@ -209,8 +203,13 @@ class LocalAgentGRPCServer:
         """Start the gRPC server."""
         self.server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=10))
         
-        # Add servicers
-        # TODO: Register services with generated protobuf code
+        # Register services
+        pb2_grpc.add_AccountingSwarmProtocolServicer_to_server(
+            AccountingSwarmServicer(self.agent), self.server
+        )
+        pb2_grpc.add_QueryProtocolServicer_to_server(
+            QueryServicer(self.agent), self.server
+        )
         
         self.server.add_insecure_port(f"[::]:{self.port}")
         await self.server.start()

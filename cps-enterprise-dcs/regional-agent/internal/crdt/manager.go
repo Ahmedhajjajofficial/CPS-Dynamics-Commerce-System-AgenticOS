@@ -245,11 +245,19 @@ func (c *PNCounter) ToMap() map[string]interface{} {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
+	var pos, neg int64
+	for _, v := range c.Increments {
+		pos += v
+	}
+	for _, v := range c.Decrements {
+		neg += v
+	}
+
 	return map[string]interface{}{
 		"node_id":    c.NodeID,
 		"increments": c.Increments,
 		"decrements": c.Decrements,
-		"value":      c.Value(),
+		"value":      pos - neg,
 	}
 }
 

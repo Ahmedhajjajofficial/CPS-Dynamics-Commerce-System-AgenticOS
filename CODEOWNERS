@@ -1,0 +1,31 @@
+# Code Owners - Required Reviewers
+
+# This file defines required reviewers for different parts of the codebase
+
+# Default reviewers for any changes
+* @Ahmedhajjajofficial
+
+# Security-related changes
+SECURITY.md @Ahmedhajjajofficial
+.env.example @Ahmedhajjajofficial
+docs/VAULT-SETUP.md @Ahmedhajjajofficial
+docs/BRANCH-PROTECTION.md @Ahmedhajjajofficial
+.github/workflows/security-checks.yml @Ahmedhajjajofficial
+
+# CI/CD configuration
+.github-ci.yml @Ahmedhajjajofficial
+.github/workflows/ @Ahmedhajjajofficial
+
+# Application code
+/app/ @Ahmedhajjajofficial
+/cps-enterprise-dcs/pos-interface/ @Ahmedhajjajofficial
+/cps-enterprise-dcs/local-agent/ @Ahmedhajjajofficial
+/cps-enterprise-dcs/regional-agent/ @Ahmedhajjajofficial
+
+# Documentation
+/docs/ @Ahmedhajjajofficial
+README.md @Ahmedhajjajofficial
+
+# Database & Infrastructure
+/cps-enterprise-dcs/event-store/ @Ahmedhajjajofficial
+/cps-enterprise-dcs/infrastructure/ @Ahmedhajjajofficial

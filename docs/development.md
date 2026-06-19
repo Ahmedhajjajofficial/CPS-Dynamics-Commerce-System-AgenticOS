@@ -17,8 +17,8 @@
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/Ahmedhajjajofficial/CPS-Enterprise-Dynamics-Commerce-System-DCS.git
-cd CPS-Enterprise-Dynamics-Commerce-System-DCS
+git clone https://github.com/Ahmedhajjajofficial/CPS-Dynamics-Commerce-System-AgenticOS.git
+cd CPS-Dynamics-Commerce-System-AgenticOS
 ```
 
 ### 2. Install All Dependencies

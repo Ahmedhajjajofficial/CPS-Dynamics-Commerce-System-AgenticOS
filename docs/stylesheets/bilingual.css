@@ -1,0 +1,134 @@
+/* ==============================================
+   Bilingual RTL/LTR Support - En-US / Ar-EG
+   ============================================== */
+
+/* --- Language Switcher Styling --- */
+.md-header__topic .md-ellipsis {
+  font-family: 'Segoe UI', 'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif;
+}
+
+/* --- Arabic (RTL) Defaults --- */
+[dir="rtl"] {
+  font-family: 'Cairo', 'Noto Sans Arabic', 'Segoe UI', Tahoma, sans-serif;
+}
+
+[dir="rtl"] .md-typeset {
+  text-align: right;
+}
+
+[dir="rtl"] .md-typeset h1,
+[dir="rtl"] .md-typeset h2,
+[dir="rtl"] .md-typeset h3,
+[dir="rtl"] .md-typeset h4 {
+  text-align: right;
+}
+
+[dir="rtl"] .md-nav__link {
+  text-align: right;
+}
+
+[dir="rtl"] .md-typeset table:not([class]) th,
+[dir="rtl"] .md-typeset table:not([class]) td {
+  text-align: right;
+}
+
+[dir="rtl"] .md-typeset code,
+[dir="rtl"] .md-typeset pre {
+  direction: ltr;
+  text-align: left;
+}
+
+[dir="rtl"] .md-typeset .admonition,
+[dir="rtl"] .md-typeset details {
+  text-align: right;
+}
+
+/* --- English (LTR) Overrides --- */
+[dir="ltr"] {
+  font-family: 'Segoe UI', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+[dir="ltr"] .md-typeset {
+  text-align: left;
+}
+
+/* --- Language Toggle Button --- */
+.md-header__option .md-select__link {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  transition: all 0.2s ease;
+}
+
+.md-header__option .md-select__link:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(0, 229, 255, 0.4);
+}
+
+/* --- Hero Section --- */
+.hero-section {
+  padding: 2rem;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.05), rgba(0, 229, 255, 0.02));
+  border: 1px solid rgba(0, 229, 255, 0.1);
+  margin-bottom: 1.5rem;
+}
+
+[data-md-color-scheme="slate"] .hero-section {
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.08), rgba(0, 0, 0, 0.2));
+  border: 1px solid rgba(0, 229, 255, 0.15);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+/* --- Grid Cards Enhancement --- */
+.grid.cards > ul > li {
+  border-radius: 12px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.grid.cards > ul > li:hover {
+  transform: translateY(-2px);
+}
+
+[data-md-color-scheme="slate"] .grid.cards > ul > li {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+[data-md-color-scheme="slate"] .grid.cards > ul > li:hover {
+  border-color: rgba(0, 229, 255, 0.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+/* --- RTL Code Block Fix --- */
+[dir="rtl"] .md-typeset pre > code {
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: embed;
+}
+
+[dir="rtl"] .md-typeset .highlight pre {
+  direction: ltr;
+}
+
+[dir="rtl"] .md-typeset .tabbed-labels > label {
+  direction: rtl;
+}
+
+/* --- RTL Table Alignment for Code Columns --- */
+[dir="rtl"] .md-typeset table code {
+  direction: ltr;
+  unicode-bidi: embed;
+}
+
+/* --- Smooth Direction Transition --- */
+body {
+  transition: direction 0s;
+}
+
+.md-content,
+.md-sidebar,
+.md-header {
+  transition: all 0.3s ease;
+}

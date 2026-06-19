@@ -1,10 +1,13 @@
-site_name: CPS Enterprise DCS
-site_url: https://ahmedhajjajofficial.github.io/CPS-Enterprise-Dynamics-Commerce-System-DCS/
+site_name: CP'S Enterprise DCS
+site_url: https://ahmedhajjajofficial.github.io/CPS-Dynamics-Commerce-System-AgenticOS/
 
 theme:
   name: material
-  language: ar # Primary: Arabic
+  language: ar
   direction: rtl
+  logo: assets/logo.png
+  favicon: assets/favicon.png
+  custom_dir: docs/overrides
   palette:
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
@@ -30,15 +33,51 @@ theme:
 
 extra_css:
   - stylesheets/glassmorphism.css
+  - stylesheets/bilingual.css
 
-extra_html:
-  - index.html
+extra:
+  alternate:
+    - name: العربية
+      link: /CPS-Dynamics-Commerce-System-AgenticOS/ar/
+      lang: ar
+    - name: English
+      link: /CPS-Dynamics-Commerce-System-AgenticOS/en/
+      lang: en
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Ahmedhajjajofficial/CPS-Dynamics-Commerce-System-AgenticOS
+
+copyright: "© 2026 CP'S Businesses for Enterprises Tech Solution. All rights reserved. | جميع الحقوق محفوظة."
+
+plugins:
+  - search
+  - i18n:
+      default_language: ar
+      default_language_only: false
+      docs_structure: folder
+      languages:
+        - locale: ar
+          default: true
+          name: العربية
+          build: true
+        - locale: en
+          name: English
+          build: true
+          nav_translations:
+            الرئيسية: Home
+            الهيكلية: Architecture
+            واجهة البرمجة: API
+            التطوير: Development
+            النشر: Deployment
+  - minify:
+      minify_html: true
 
 nav:
-  - Architecture: architecture.md
-  - API: api.md
-  - Development: development.md
-  - Deployment: deployment.md
+  - الرئيسية: index.md
+  - الهيكلية: architecture.md
+  - واجهة البرمجة: api.md
+  - التطوير: development.md
+  - النشر: deployment.md
 
 markdown_extensions:
   - abbr
@@ -69,8 +108,3 @@ markdown_extensions:
   - pymdownx.tasklist:
       custom_checkbox: true
   - pymdownx.tilde
-
-plugins:
-  - search
-  - minify:
-      minify_html: true

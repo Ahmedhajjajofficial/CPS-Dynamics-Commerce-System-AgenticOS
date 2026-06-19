@@ -6,6 +6,11 @@ export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
+      fontFamily: {
+        brand: ['IBM Plex Sans Arabic', 'Inter', 'system-ui', 'sans-serif'],
+        display: ['Inter', 'IBM Plex Sans Arabic', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -50,8 +55,19 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        /* CPS Brand Colors */
+        cps: {
+          cyan: '#00e5ff',
+          blue: '#3b82f6',
+          purple: '#7c3aed',
+          emerald: '#10b981',
+          amber: '#f59e0b',
+          rose: '#f43f5e',
+        },
       },
       borderRadius: {
+        '3xl': '1.5rem',
+        '4xl': '2rem',
         xl: "calc(var(--radius) + 4px)",
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
@@ -60,6 +76,14 @@ export default {
       },
       boxShadow: {
         xs: "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+        glass: "0 8px 32px rgba(0, 0, 0, 0.3)",
+        'glass-lg': "0 20px 60px rgba(0, 0, 0, 0.4)",
+        'glow-cyan': "0 0 20px rgba(0, 229, 255, 0.15), 0 0 60px rgba(0, 229, 255, 0.05)",
+        'glow-cyan-lg': "0 0 40px rgba(0, 229, 255, 0.2), 0 0 80px rgba(0, 229, 255, 0.08)",
+      },
+      backdropBlur: {
+        glass: '24px',
+        'glass-heavy': '40px',
       },
       keyframes: {
         "accordion-down": {
@@ -74,11 +98,21 @@ export default {
           "0%,70%,100%": { opacity: "1" },
           "20%,50%": { opacity: "0" },
         },
+        "float": {
+          "0%, 100%": { transform: "translateY(0px)" },
+          "50%": { transform: "translateY(-10px)" },
+        },
+        "shimmer": {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(100%)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "caret-blink": "caret-blink 1.25s ease-out infinite",
+        "float": "float 6s ease-in-out infinite",
+        "shimmer": "shimmer 2s linear infinite",
       },
     },
   },

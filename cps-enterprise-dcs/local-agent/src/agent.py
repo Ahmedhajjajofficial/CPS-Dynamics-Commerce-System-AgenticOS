@@ -183,10 +183,11 @@ class LocalAgent:
         Centralizes the repeated encrypt-or-serialize / build-metadata / append
         pattern used by every business operation.
         """
-        if self.config.enable_encryption and public_metadata is not None:
+        if self.config.enable_encryption:
+            meta = public_metadata or {"event_type": event_type}
             encrypted = self.sovereign_payload.encrypt_event(
                 event_data=event_data,
-                metadata=public_metadata,
+                metadata=meta,
                 sensitive_fields=sensitive_fields
             )
             payload = encrypted.serialize()

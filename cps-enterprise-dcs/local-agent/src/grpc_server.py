@@ -110,7 +110,7 @@ class AccountingSwarmServicer(pb2_grpc.AccountingSwarmProtocolServicer):
         proto_event = pb2.SovereignFinancialEvent(
             event_id=event.event_id,
             stream_version=event.version,
-            type=pb2.EventType.Value(event.event_type) if hasattr(pb2.EventType, event.event_type) else pb2.UNKNOWN
+            type=pb2.EventType.Value(event.event_type) if event.event_type in pb2.EventType.keys() else pb2.UNKNOWN
         )
         
         # Set timestamp

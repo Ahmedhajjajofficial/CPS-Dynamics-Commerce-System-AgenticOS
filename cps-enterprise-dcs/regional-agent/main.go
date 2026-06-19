@@ -36,6 +36,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"github.com/cps-enterprise/dcs/regional-agent/internal/agent"
@@ -164,8 +165,11 @@ func getEnvBool(key string, defaultValue bool) bool {
 
 func getEnvInt(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
-		var result int
-		fmt.Sscanf(value, "%d", &result)
+		result, err := strconv.Atoi(value)
+		if err != nil {
+			log.Printf("Warning: invalid integer for %s=%q, using default %d: %v", key, value, defaultValue, err)
+			return defaultValue
+		}
 		return result
 	}
 	return defaultValue

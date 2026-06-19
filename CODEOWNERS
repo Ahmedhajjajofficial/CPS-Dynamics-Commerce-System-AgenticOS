@@ -13,7 +13,7 @@ docs/BRANCH-PROTECTION.md @Ahmedhajjajofficial
 .github/workflows/security-checks.yml @Ahmedhajjajofficial
 
 # CI/CD configuration
-.gitlab-ci.yml @Ahmedhajjajofficial
+.github-ci.yml @Ahmedhajjajofficial
 .github/workflows/ @Ahmedhajjajofficial
 
 # Application code

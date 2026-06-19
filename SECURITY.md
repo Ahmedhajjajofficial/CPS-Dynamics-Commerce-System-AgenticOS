@@ -54,4 +54,4 @@ While we do not currently operate a monetary bounty program, we value the expert
 
 ---
 
-For updates and official releases, monitor the [CPS DCS GitHub Repository](https://github.com/Ahmedhajjajofficial/CPS-Enterprise-Dynamics-Commerce-System-DCS).
+For updates and official releases, monitor the [CPS DCS GitHub Repository](https://github.com/Ahmedhajjajofficial/CPS-Dynamics-Commerce-System-AgenticOS).

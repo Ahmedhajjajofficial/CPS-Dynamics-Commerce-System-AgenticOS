@@ -8,7 +8,7 @@ icon: material/home
 
 ## نظام تجارة موزع ذكي مبني على الأحداث
 
-نظام **CPS Enterprise DCS** هو منصة تجارة إلكترونية موزعة تعتمد على بنية الوكلاء الذكيين (Agentic Architecture) مع دعم كامل للعمل دون اتصال بالإنترنت.
+نظام **CPS Enterprise DCS** هو منصة تجارة إلكترونية موزعة تعتمد على بنية الوكلاء الذكيين (Agentic Architecture) مع دعم كامل للعمل بدون اتصال بالإنترنت.
 
 </div>
 
@@ -109,8 +109,8 @@ icon: material/home
 
 ```bash
 # استنساخ المستودع
-git clone https://gitlab.com/bumble-ideas-projects/niamimniaCmmPS-Enterprise-Dynamics-Commerce-System-DCS.git
-cd CPS-Enterprise-Dynamics-Commerce-System-DCS
+git clone https://github.com/Ahmedhajjajofficial/CPS-Dynamics-Commerce-System-AgenticOS.git
+cd CPS-Dynamics-Commerce-System-AgenticOS
 
 # تثبيت جميع التبعيات
 make install

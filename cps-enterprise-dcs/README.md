@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../assets/brand/logo-light.png" alt="CPS Logo" width="200"/>
+</p>
+
 # CP'S Enterprise Dynamics Commerce System (DCS) v4.0
 
 <p align="center">
@@ -17,19 +21,18 @@
 </p>
 
 ---
-
 ## 🎯 Vision
 
-CP'S Enterprise DCS is not just another ERP/POS system. It is a **declaration of software sovereignty** — a complete reimagining of what enterprise commerce infrastructure should be in an era of cloud dependency and data exploitation.
+CP'S Enterprise DCS is not just another ERP/POS system. It is a **declaration of software sovereignty** — a complete reimagining of what enterprise commerce infrastructure should be. By transitioning to a sovereign freedom model on GitHub, we prioritize open collaboration over proprietary subscription gatekeeping.
 
-> *"We do not compete with Dynamics 365 by imitation. We compete by redefining what enterprise commerce should be."*
+> *"We do not compete with Dynamics 365 by imitation. We compete by redefining what enterprise commerce should be: Sovereign, Free, and Distributed."*
 > — Ahmed Hajjaj, Full-Spectrum Architect
 
 ### Core Principles
 
-1. **Sovereign Data** — Your data is yours alone. No cloud provider can access it.
-2. **Offline-First** — Business continues even during complete network isolation.
-3. **Event Sourcing** — Complete, immutable audit trail for compliance and forensics.
+1. **Sovereign Data** — Your data is yours alone. No cloud provider or subscription service can access or gate it.
+2. **Subscription Freedom** — Logic of sovereignty dictates that core functionality must never be behind a paywall.
+3. **Offline-First** — Business continues even during complete network isolation.
 4. **Agentic Intelligence** — Autonomous agents that manage operations, not just automate tasks.
 5. **Mathematical Consistency** — CRDTs guarantee convergence without coordination.
 
@@ -39,8 +42,10 @@ CP'S Enterprise DCS is not just another ERP/POS system. It is a **declaration of
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                           CP'S Enterprise DCS v4.0                          │
+│                      CP'S Enterprise DCS v4.0 - AgenticOS                   │
 ├─────────────────────────────────────────────────────────────────────────────┤
+```
+
 │                                                                             │
 │  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐         │
 │  │   RockDeals     │    │   RockDeals     │    │   RockDeals     │         │
@@ -112,9 +117,9 @@ CP'S Enterprise DCS is not just another ERP/POS system. It is a **declaration of
 
 ```bash
 # Clone the repository
-git clone https://github.com/cps-enterprise/dcs.git
-cd dcs
-
+git clone https://github.com/Ahmedhajjajofficial/CPS-Enterprise-Dynamics-Commerce-System-DCS-AgenticOS.git
+cd CPS-Enterprise-Dynamics-Commerce-System-DCS-AgenticOS
+```
 # Set up environment
 cp .env.example .env
 # Edit .env with your configuration
@@ -257,9 +262,15 @@ make lint
 
 ## 📜 License
 
-This project is licensed under the **CP'S Enterprise License** — see [LICENSE](LICENSE) for details.
+This project is licensed under the **CP'S Enterprise Sovereign Freedom License** — see [LICENSE](LICENSE) for details.
 
-> ⚠️ **Note**: This is proprietary software. Unauthorized distribution is prohibited.
+> ⚠️ **Note**: This software is built for logic of sovereignty. Any attempt to lock core features behind mandatory paid subscriptions violates the spirit of this project.
+
+---
+
+## 👨‍💻 Implementation & Changes
+
+The transition to gRPC-based distributed balance and the sovereign freedom model was implemented by **Ahmed Hajjaj**.
 
 ---
 

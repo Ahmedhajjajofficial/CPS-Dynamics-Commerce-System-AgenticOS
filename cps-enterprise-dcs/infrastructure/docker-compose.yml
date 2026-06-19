@@ -14,7 +14,7 @@ services:
     container_name: dcs-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-dcs_admin}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dcs_secure_password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-dcs_eventstore}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -35,7 +35,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: dcs-redis
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
     volumes:
       - redis_data:/data
     ports:
@@ -57,7 +57,7 @@ services:
     cap_add:
       - IPC_LOCK
     environment:
-      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_TOKEN:-dcs-dev-token}
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_TOKEN:?Set VAULT_TOKEN in .env}
       VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
     volumes:
       - vault_data:/vault/file
@@ -121,7 +121,7 @@ services:
     container_name: dcs-grafana
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?Set GRAFANA_PASSWORD in .env}
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
@@ -145,7 +145,7 @@ services:
       DCS_RPC_ADDR: :12000
       DCS_RAFT_ADDR: :12001
       DCS_GRPC_PORT: 50052
-      DCS_POSTGRESQL_URL: postgres://${POSTGRES_USER:-dcs_admin}:${POSTGRES_PASSWORD:-dcs_secure_password}@postgres:5432/${POSTGRES_DB:-dcs_eventstore}?sslmode=disable
+      DCS_POSTGRESQL_URL: postgres://${POSTGRES_USER:-dcs_admin}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-dcs_eventstore}?sslmode=require
       DCS_REDIS_URL: redis:6379
       DCS_BOOTSTRAP: "true"
     ports:

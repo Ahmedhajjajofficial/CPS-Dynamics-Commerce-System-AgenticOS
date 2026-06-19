@@ -1,0 +1,19 @@
+# CP'S Enterprise DCS - Sovereign Freedom License (v1.0)
+
+Copyright (c) 2024 Ahmed Hajjaj
+
+## Preamble
+The CP'S Enterprise Dynamics Commerce System (DCS) is built upon the "Logic of Sovereignty." This software is dedicated to the freedom of the enterprise from cloud dependency, data exploitation, and mandatory subscription-based gatekeeping.
+
+## 1. Sovereignty
+This software is provided for use under the condition that the user maintains complete sovereignty over their data. Any modification that introduces mandatory cloud-provider telemetry, unauthorized data exfiltration, or "pay-to-play" core functionality is prohibited.
+
+## 2. Freedom
+- **No Mandatory Subscriptions**: Core architectural components must remain functional without third-party paid subscriptions.
+- **Offline Integrity**: The software's value is derived from its local execution and P2P coordination, not from a centralized licensing server.
+
+## 3. Developer Credit
+All derivative works must maintain credit to the original architect: **Ahmed Hajjaj**.
+
+## 4. Limitation of Liability
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

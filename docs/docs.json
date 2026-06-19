@@ -1,0 +1,128 @@
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "CPS Enterprise Dynamics Commerce System",
+  "logo": {
+    "dark": "/logo/dark.png",
+    "light": "/logo/light.png",
+    "href": "https://cps-enterprise.com"
+  },
+  "favicon": "/favicon.png",
+  "colors": {
+    "primary": "#0ea5e9",
+    "light": "#38bdf8",
+    "dark": "#0284c7",
+    "anchors": "#0369a1"
+  },
+  "topbarLinks": [
+    {
+      "name": "GitHub Repository",
+      "url": "https://github.com/Ahmedhajjajofficial/CPS-Enterprise-Dynamics-Commerce-System-DCS-AgenticOS"
+    },
+    {
+      "name": "Support Center",
+      "url": "mailto:support@cps-enterprise.com"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "System Dashboard",
+    "url": "https://app.cps-enterprise.com"
+  },
+  "tabs": [
+    {
+      "name": "System Documentation",
+      "url": "docs"
+    },
+    {
+      "name": "API Reference",
+      "url": "api"
+    },
+    {
+      "name": "AgenticOS Guidelines",
+      "url": "agentic-os"
+    },
+    {
+      "name": "Changelog",
+      "url": "changelog"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Getting Started",
+      "pages": [
+        "docs/index",
+        "docs/quickstart",
+        "docs/environment-setup"
+      ]
+    },
+    {
+      "group": "Architecture & Engineering",
+      "pages": [
+        "docs/architecture",
+        "docs/grpc-protocols",
+        "docs/nodejs-services",
+        "docs/database-schema"
+      ]
+    },
+    {
+      "group": "Bumble-A AgenticOS",
+      "pages": [
+        "agentic-os/overview",
+        "agentic-os/automation-engine",
+        "agentic-os/control-mechanisms",
+        "agentic-os/asynchronous-tasks"
+      ]
+    },
+    {
+      "group": "Infrastructure & Deployment",
+      "pages": [
+        "docs/deployment",
+        "docs/google-cloud-shell",
+        "docs/red-hat-openshift",
+        "docs/ci-cd-pipelines"
+      ]
+    },
+    {
+      "group": "API Integration",
+      "pages": [
+        "api/authentication",
+        "api/endpoints",
+        "api/webhooks",
+        "api/rate-limits"
+      ]
+    },
+    {
+      "group": "Changelog",
+      "pages": [
+        "changelog/2026-05-22",
+        "changelog/2026-05-15"
+      ]
+    }
+  ],
+  "api": {
+    "baseUrl": "https://api.cps-enterprise.com/v1",
+    "auth": {
+      "method": "bearer"
+    }
+  },
+  "seo": {
+    "index": true,
+    "fallbackTitle": "CPS Enterprise Dynamics - Technical Documentation",
+    "fallbackDescription": "Official documentation for the CPS Enterprise Dynamics Commerce System and Bumble-A AgenticOS."
+  },
+  "analytics": {
+    "googleAnalytics": {
+      "measurementId": "G-XXXXXXXXXX"
+    }
+  },
+  "footerSocials": {
+    "github": "https://github.com/Ahmedhajjajofficial",
+    "linkedin": "https://linkedin.com/in/ahmedhajjaj"
+  },
+  "feedback": {
+    "suggestEdit": true,
+    "raiseIssue": true
+  },
+  "search": {
+    "prompt": "Search documentation, APIs, or architectural guidelines..."
+  }
+}

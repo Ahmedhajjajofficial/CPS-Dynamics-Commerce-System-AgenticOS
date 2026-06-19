@@ -164,6 +164,53 @@ class LocalAgent:
         logger.info("LocalAgent shutdown complete")
     
     # ═══════════════════════════════════════════════════════════════════════════
+    # SHARED EVENT RECORDING HELPER
+    # ═══════════════════════════════════════════════════════════════════════════
+    
+    async def _record_event(
+        self,
+        stream_id: str,
+        event_type: str,
+        event_data: Dict[str, Any],
+        correlation_id: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+        public_metadata: Optional[Dict[str, Any]] = None,
+        sensitive_fields: Optional[list] = None
+    ) -> StoredEvent:
+        """
+        Record an event to the store with optional encryption.
+        
+        Centralizes the repeated encrypt-or-serialize / build-metadata / append
+        pattern used by every business operation.
+        """
+        if self.config.enable_encryption:
+            meta = public_metadata or {"event_type": event_type}
+            encrypted = self.sovereign_payload.encrypt_event(
+                event_data=event_data,
+                metadata=meta,
+                sensitive_fields=sensitive_fields
+            )
+            payload = encrypted.serialize()
+        else:
+            payload = json.dumps(event_data).encode()
+        
+        event_metadata = EventMetadata(
+            correlation_id=correlation_id or str(uuid.uuid4()),
+            agent_id=self.config.agent_id,
+            tenant_id=tenant_id
+        )
+        
+        event = await self.event_store.append(
+            stream_id=stream_id,
+            event_type=event_type,
+            payload=payload,
+            metadata=event_metadata
+        )
+        
+        logger.info(f"Event recorded [{event_type}]: {event.event_id}")
+        return event
+    
+    # ═══════════════════════════════════════════════════════════════════════════
     # EVENT SOURCING OPERATIONS
     # ═══════════════════════════════════════════════════════════════════════════
     
@@ -185,7 +232,6 @@ class LocalAgent:
         This is the primary business operation - fast, reliable, and
         works even when completely offline.
         """
-        # Prepare event data
         event_data = {
             "product_id": product_id,
             "quantity": quantity,
@@ -198,46 +244,24 @@ class LocalAgent:
             "metadata": metadata or {}
         }
         
-        # Encrypt sensitive data
-        if self.config.enable_encryption:
-            public_metadata = {
+        event = await self._record_event(
+            stream_id=f"{self.config.branch_id}:sales:{session_id}",
+            event_type="SALE_COMPLETED",
+            event_data=event_data,
+            tenant_id=self.config.branch_id,
+            public_metadata={
                 "event_type": "SALE_COMPLETED",
                 "branch_id": self.config.branch_id,
                 "product_id": product_id,
                 "total_amount": total_amount,
                 "timestamp": datetime.utcnow().isoformat()
-            }
-            
-            encrypted = self.sovereign_payload.encrypt_event(
-                event_data=event_data,
-                metadata=public_metadata,
-                sensitive_fields=["customer_id"]
-            )
-            payload = encrypted.serialize()
-        else:
-            payload = json.dumps(event_data).encode()
-        
-        # Create event metadata
-        event_metadata = EventMetadata(
-            correlation_id=str(uuid.uuid4()),
-            agent_id=self.config.agent_id,
-            tenant_id=self.config.branch_id
+            },
+            sensitive_fields=["customer_id"]
         )
         
-        # Append to event store
-        stream_id = f"{self.config.branch_id}:sales:{session_id}"
-        event = await self.event_store.append(
-            stream_id=stream_id,
-            event_type="SALE_COMPLETED",
-            payload=payload,
-            metadata=event_metadata
-        )
-        
-        # Update CRDT counters
         await self._update_sales_counter(total_amount)
         await self._update_inventory_counter(product_id, -quantity)
         
-        logger.info(f"Sale recorded: {event.event_id} - {total_amount}")
         return event
     
     async def record_inventory_receipt(
@@ -259,38 +283,20 @@ class LocalAgent:
             "metadata": metadata or {}
         }
         
-        if self.config.enable_encryption:
-            public_metadata = {
+        event = await self._record_event(
+            stream_id=f"{self.config.branch_id}:inventory:{product_id}",
+            event_type="INVENTORY_RECEIVED",
+            event_data=event_data,
+            public_metadata={
                 "event_type": "INVENTORY_RECEIVED",
                 "branch_id": self.config.branch_id,
                 "product_id": product_id,
                 "quantity": quantity
             }
-            encrypted = self.sovereign_payload.encrypt_event(
-                event_data=event_data,
-                metadata=public_metadata
-            )
-            payload = encrypted.serialize()
-        else:
-            payload = json.dumps(event_data).encode()
-        
-        event_metadata = EventMetadata(
-            correlation_id=str(uuid.uuid4()),
-            agent_id=self.config.agent_id
         )
         
-        stream_id = f"{self.config.branch_id}:inventory:{product_id}"
-        event = await self.event_store.append(
-            stream_id=stream_id,
-            event_type="INVENTORY_RECEIVED",
-            payload=payload,
-            metadata=event_metadata
-        )
-        
-        # Update inventory counter
         await self._update_inventory_counter(product_id, quantity)
         
-        logger.info(f"Inventory receipt recorded: {event.event_id}")
         return event
     
     async def start_sales_session(
@@ -302,29 +308,19 @@ class LocalAgent:
         """Start a new sales session."""
         session_id = str(uuid.uuid4())
         
-        event_data = {
-            "session_id": session_id,
-            "cashier_id": cashier_id,
-            "register_id": register_id,
-            "opening_balance": opening_balance,
-            "started_at": datetime.utcnow().isoformat()
-        }
-        
-        payload = json.dumps(event_data).encode()
-        event_metadata = EventMetadata(
-            correlation_id=session_id,
-            agent_id=self.config.agent_id
-        )
-        
-        stream_id = f"{self.config.branch_id}:sessions:{session_id}"
-        await self.event_store.append(
-            stream_id=stream_id,
+        await self._record_event(
+            stream_id=f"{self.config.branch_id}:sessions:{session_id}",
             event_type="SESSION_OPENED",
-            payload=payload,
-            metadata=event_metadata
+            event_data={
+                "session_id": session_id,
+                "cashier_id": cashier_id,
+                "register_id": register_id,
+                "opening_balance": opening_balance,
+                "started_at": datetime.utcnow().isoformat()
+            },
+            correlation_id=session_id
         )
         
-        logger.info(f"Sales session started: {session_id}")
         return session_id
     
     async def close_sales_session(
@@ -335,45 +331,41 @@ class LocalAgent:
         transaction_count: int
     ) -> StoredEvent:
         """Close a sales session with reconciliation."""
-        event_data = {
-            "session_id": session_id,
-            "closing_balance": closing_balance,
-            "total_sales": total_sales,
-            "transaction_count": transaction_count,
-            "closed_at": datetime.utcnow().isoformat()
-        }
-        
-        payload = json.dumps(event_data).encode()
-        event_metadata = EventMetadata(
-            correlation_id=session_id,
-            agent_id=self.config.agent_id
-        )
-        
-        stream_id = f"{self.config.branch_id}:sessions:{session_id}"
-        event = await self.event_store.append(
-            stream_id=stream_id,
+        return await self._record_event(
+            stream_id=f"{self.config.branch_id}:sessions:{session_id}",
             event_type="SESSION_CLOSED",
-            payload=payload,
-            metadata=event_metadata
+            event_data={
+                "session_id": session_id,
+                "closing_balance": closing_balance,
+                "total_sales": total_sales,
+                "transaction_count": transaction_count,
+                "closed_at": datetime.utcnow().isoformat()
+            },
+            correlation_id=session_id
         )
-        
-        logger.info(f"Sales session closed: {session_id}")
-        return event
     
     # ═══════════════════════════════════════════════════════════════════════════
     # CRDT OPERATIONS
     # ═══════════════════════════════════════════════════════════════════════════
     
+    def _get_or_create_counter(
+        self,
+        registry: Dict,
+        counter_id: str,
+        counter_type: str = "PN"
+    ):
+        """Get an existing CRDT counter or create one if missing."""
+        if counter_id not in registry:
+            registry[counter_id] = self.crdt_manager.create_counter(
+                counter_id, counter_type=counter_type
+            )
+        return registry[counter_id]
+    
     async def _update_inventory_counter(self, product_id: str, delta: int):
         """Update inventory counter for a product."""
-        counter_id = f"inventory:{product_id}"
-        
-        if counter_id not in self._inventory_counters:
-            self._inventory_counters[counter_id] = self.crdt_manager.create_counter(
-                counter_id, counter_type="PN"
-            )
-        
-        counter = self._inventory_counters[counter_id]
+        counter = self._get_or_create_counter(
+            self._inventory_counters, f"inventory:{product_id}", "PN"
+        )
         if delta > 0:
             counter.increment(delta)
         else:
@@ -382,28 +374,21 @@ class LocalAgent:
     async def _update_sales_counter(self, amount: float):
         """Update daily sales counter."""
         today = datetime.utcnow().strftime("%Y-%m-%d")
-        counter_id = f"sales:{today}"
-        
-        if counter_id not in self._sales_counters:
-            self._sales_counters[counter_id] = self.crdt_manager.create_counter(
-                counter_id, counter_type="G"
-            )
-        
-        self._sales_counters[counter_id].increment(int(amount * 100))  # Store as cents
+        counter = self._get_or_create_counter(
+            self._sales_counters, f"sales:{today}", "G"
+        )
+        counter.increment(int(amount * 100))  # Store as cents
     
     def get_inventory_level(self, product_id: str) -> int:
         """Get current inventory level for a product."""
-        counter_id = f"inventory:{product_id}"
-        counter = self._inventory_counters.get(counter_id)
+        counter = self._inventory_counters.get(f"inventory:{product_id}")
         return counter.value if counter else 0
     
     def get_daily_sales(self, date: Optional[str] = None) -> float:
         """Get total sales for a date (default: today)."""
         if date is None:
             date = datetime.utcnow().strftime("%Y-%m-%d")
-        
-        counter_id = f"sales:{date}"
-        counter = self._sales_counters.get(counter_id)
+        counter = self._sales_counters.get(f"sales:{date}")
         return counter.value / 100.0 if counter else 0.0
     
     # ═══════════════════════════════════════════════════════════════════════════
@@ -457,13 +442,31 @@ class LocalAgent:
     
     async def _sync_loop(self):
         """Background task for synchronizing with regional agent."""
+        consecutive_failures = 0
         while self._running:
             try:
                 await self._sync_with_regional()
                 self.sync_status.is_connected = True
+                self.sync_status.failed_events = 0
+                consecutive_failures = 0
+                if self.state == AgentState.DEGRADED:
+                    self.state = AgentState.ACTIVE
+                    logger.info("Sync recovered, state restored to ACTIVE")
             except Exception as e:
-                logger.error(f"Sync failed: {e}")
+                consecutive_failures += 1
                 self.sync_status.is_connected = False
+                self.sync_status.failed_events += 1
+                logger.error(
+                    "Sync failed (attempt %d): %s",
+                    consecutive_failures, e,
+                    exc_info=True,
+                )
+                if consecutive_failures >= 3 and self.state == AgentState.ACTIVE:
+                    self.state = AgentState.DEGRADED
+                    logger.warning(
+                        "Entering DEGRADED state after %d consecutive sync failures",
+                        consecutive_failures,
+                    )
             
             await asyncio.sleep(self.config.sync_interval_seconds)
     
@@ -490,13 +493,18 @@ class LocalAgent:
     
     def _on_event(self, event: StoredEvent):
         """Handle events for projections."""
-        # Notify registered handlers
         handlers = self._event_handlers.get(event.event_type, [])
         for handler in handlers:
             try:
                 handler(event)
             except Exception as e:
-                logger.error(f"Event handler failed: {e}")
+                logger.error(
+                    "Event handler %s failed for event %s: %s",
+                    handler.__name__ if hasattr(handler, '__name__') else repr(handler),
+                    event.event_id,
+                    e,
+                    exc_info=True,
+                )
     
     def on_event(
         self,
@@ -539,16 +547,18 @@ class LocalAgent:
         result: Dict[str, Any]
     ):
         """Record completion of a saga step."""
-        if saga_id in self._active_sagas:
-            self._active_sagas[saga_id]["steps"].append({
-                "step_name": step_name,
-                "result": result,
-                "completed_at": datetime.utcnow().isoformat()
-            })
+        if saga_id not in self._active_sagas:
+            raise ValueError(f"Unknown saga: {saga_id}")
+        self._active_sagas[saga_id]["steps"].append({
+            "step_name": step_name,
+            "result": result,
+            "completed_at": datetime.utcnow().isoformat()
+        })
     
     async def complete_saga(self, saga_id: str):
         """Mark a saga as completed."""
-        if saga_id in self._active_sagas:
-            self._active_sagas[saga_id]["state"] = "COMPLETED"
-            self._active_sagas[saga_id]["completed_at"] = datetime.utcnow().isoformat()
-            logger.info(f"Saga completed: {saga_id}")
+        if saga_id not in self._active_sagas:
+            raise ValueError(f"Unknown saga: {saga_id}")
+        self._active_sagas[saga_id]["state"] = "COMPLETED"
+        self._active_sagas[saga_id]["completed_at"] = datetime.utcnow().isoformat()
+        logger.info(f"Saga completed: {saga_id}")

@@ -14,7 +14,6 @@ import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
 
 option go_package = "github.com/cps-enterprise/dcs/proto";
-option python_package = "cps_enterprise.dcs.proto";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SECTION 1: SOVEREIGN SECURITY LAYER
@@ -164,7 +163,7 @@ enum EventType {
   SAGA_STEP_COMPLETED = 61;
   SAGA_COMPENSATION_TRIGGERED = 62;
   SAGA_COMPENSATION_COMPLETED = 63;
-  SAGA_FAILED = 64;
+  SAGA_FAILURE_DETECTED = 64;
   TRANSACTION_REJECTED = 65;
   
   // Agent Flow

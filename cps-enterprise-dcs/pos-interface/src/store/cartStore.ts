@@ -7,6 +7,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Cart, CartItem, Product, Customer } from '../types';
+import { calculateItemTotal, calculateCartDiscountAmount } from '../utils/currency';
 
 interface CartState {
   cart: Cart;
@@ -23,19 +24,11 @@ interface CartState {
 }
 
 const calculateCartTotals = (items: CartItem[], cartDiscount: number): Pick<Cart, 'subtotal' | 'taxAmount' | 'total'> => {
-  const subtotal = items.reduce((sum, item) => {
-    const itemTotal = item.product.price * item.quantity;
-    const itemDiscount = itemTotal * (item.discount / 100);
-    return sum + (itemTotal - itemDiscount);
-  }, 0);
-
-  const cartDiscountAmount = subtotal * (cartDiscount / 100);
-  const afterCartDiscount = subtotal - cartDiscountAmount;
+  const subtotal = items.reduce((sum, item) => sum + calculateItemTotal(item), 0);
+  const afterCartDiscount = subtotal - calculateCartDiscountAmount(subtotal, cartDiscount);
 
   const taxAmount = items.reduce((sum, item) => {
-    const itemTotal = item.product.price * item.quantity;
-    const itemDiscount = itemTotal * (item.discount / 100);
-    const taxableAmount = itemTotal - itemDiscount;
+    const taxableAmount = calculateItemTotal(item);
     return sum + (taxableAmount * (item.product.taxRate / 100));
   }, 0);
 

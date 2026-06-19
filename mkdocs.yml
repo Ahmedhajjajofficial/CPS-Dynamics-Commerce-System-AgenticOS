@@ -1,12 +1,12 @@
-site_name: CPS Enterprise DCS
-site_url: https://bumble-ideas-projects.gitlab.io/niamimniaCmmPS-Enterprise-Dynamics-Commerce-System-DCS/
+site_name: CP'S Enterprise DCS
+site_url: https://ahmedhajjajofficial.github.io/CPS-Dynamics-Commerce-System-AgenticOS/
 
 theme:
   name: material
   language: ar
   direction: rtl
-  logo: assets/logo.svg
-  favicon: assets/favicon.svg
+  logo: assets/logo.png
+  favicon: assets/favicon.png
   custom_dir: docs/overrides
   palette:
     - media: "(prefers-color-scheme: dark)"
@@ -38,16 +38,16 @@ extra_css:
 extra:
   alternate:
     - name: العربية
-      link: /
+      link: /CPS-Dynamics-Commerce-System-AgenticOS/ar/
       lang: ar
     - name: English
-      link: /en/
+      link: /CPS-Dynamics-Commerce-System-AgenticOS/en/
       lang: en
   social:
-    - icon: fontawesome/brands/gitlab
-      link: https://gitlab.com/bumble-ideas-projects/niamimniaCmmPS-Enterprise-Dynamics-Commerce-System-DCS
+    - icon: fontawesome/brands/github
+      link: https://github.com/Ahmedhajjajofficial/CPS-Dynamics-Commerce-System-AgenticOS
 
-copyright: "© 2025 CP'S Enterprise DCS. All rights reserved. | جميع الحقوق محفوظة."
+copyright: "© 2026 CP'S Businesses for Enterprises Tech Solution. All rights reserved. | جميع الحقوق محفوظة."
 
 plugins:
   - search

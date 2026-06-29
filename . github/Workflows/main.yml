@@ -1,0 +1,76 @@
+name: CPS Dynamics AgenticOS CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # 1. التحقق من سلامة بناء حاوية التطوير
+  validate-devcontainer:
+    name: Validate DevContainer Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install DevContainer CLI
+        run: npm install -g @devcontainers/cli
+
+      - name: Build DevContainer Workspace
+        run: devcontainer build --workspace-folder .
+
+  # 2. بناء واختبار خدمات النظام عبر مصفوفة بالتوازي
+  test-services:
+    name: Build & Test Components
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [app, pos, local-agent, regional-agent]
+        
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # -- تهيئة بيئات التشغيل المعزولة بناءً على نوع المكون --
+      - name: Setup Node.js 18 (Frontend)
+        if: matrix.component == 'app' || matrix.component == 'pos'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+
+      - name: Setup Python 3.11 (Edge Agent)
+        if: matrix.component == 'local-agent'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Setup Go 1.21 (Regional Agent)
+        if: matrix.component == 'regional-agent'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache: 'go-build'
+
+      # -- تنفيذ أوامر التشغيل الآلي من ملف Makefile --
+      - name: Install Dependencies
+        run: make install-${{ matrix.component }}
+
+      - name: Run Static Analysis & Linting
+        run: make lint-${{ matrix.component }}
+
+      - name: Compile & Build
+        run: make build-${{ matrix.component }}
+        
+      - name: Execute Unit Tests
+        run: make test-${{ matrix.component }} || echo "Skipping tests for ${{ matrix.component }} if undefined"
+

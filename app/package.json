@@ -1,15 +1,13 @@
 {
-  "name": "cps-dynamics-agenticos",
+  "name": "cps-admin-app",
   "private": true,
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "cd app && vite",
-    "build": "cd app && tsc -b && vite build",
-    "lint": "cd app && eslint .",
-    "preview": "cd app && vite preview",
-    "build:pos": "cd cps-enterprise-dcs/pos-interface && tsc -b && vite build",
-    "dev:pos": "cd cps-enterprise-dcs/pos-interface && vite"
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

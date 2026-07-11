@@ -1,5 +1,5 @@
 {
-  "name": "CPS Dynamics AgenticOS",
+  "name": "CP'S Dynamics Commerce System AgenticOS",
   "build": {
     "dockerfile": "Dockerfile",
     "context": ".."
@@ -8,10 +8,10 @@
   "containerEnv": {
     "PATH": "/opt/venv/bin:/usr/local/go/bin:/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
     "GOPATH": "/go",
-    "PYTHONPATH": "/workspaces/CPS-Dynamics-Commerce-System-AgenticOS"
+    "PYTHONPATH": "/workspaces/cps-dynamics-agenticos"
   },
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/CPS-Dynamics-Commerce-System-AgenticOS,type=bind",
-  "workspaceFolder": "/workspaces/CPS-Dynamics-Commerce-System-AgenticOS",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/cps-dynamics-agenticos,type=bind",
+  "workspaceFolder": "/workspaces/cps-dynamics-agenticos",
   "mounts": [
     "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
   ],
@@ -23,7 +23,9 @@
     9092,
     8200,
     3001,
-    9090
+    9090,
+    50051,
+    50052
   ],
   "customizations": {
     "vscode": {
@@ -31,10 +33,17 @@
         "terminal.integrated.defaultProfile.linux": "bash",
         "python.defaultInterpreterPath": "/opt/venv/bin/python",
         "python.analysis.extraPaths": [
-          "/workspaces/CPS-Dynamics-Commerce-System-AgenticOS/cps-enterprise-dcs/local-agent/src"
+          "/workspaces/cps-dynamics-agenticos/cps-enterprise-dcs/local-agent/src"
         ],
         "go.gopath": "/go",
-        "go.toolsManagement.autoUpdate": true
+        "go.toolsManagement.autoUpdate": true,
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.organizeImports": "explicit"
+        },
+        "python.linting.enabled": true,
+        "python.linting.pylintEnabled": false,
+        "python.linting.ruffEnabled": true
       },
       "extensions": [
         "dbaeumer.vscode-eslint",
@@ -48,10 +57,11 @@
         "mtxr.sqltools",
         "mtxr.sqltools-driver-pg",
         "redhat.vscode-yaml",
-        "github.vscode-github-actions"
+        "github.vscode-github-actions",
+        "ms-vscode.test-adapter-converter"
       ]
     }
   },
-  "postCreateCommand": "cd /workspaces/CPS-Dynamics-Commerce-System-AgenticOS && git config --global --add safe.directory /workspaces/CPS-Dynamics-Commerce-System-AgenticOS && echo 'Dev container ready. Run make install to install all dependencies.'",
-  "postStartCommand": "echo 'CPS Dynamics AgenticOS Development Environment is ready.'"
+  "postCreateCommand": "cd /workspaces/cps-dynamics-agenticos && git config --global --add safe.directory /workspaces/cps-dynamics-agenticos && echo 'Dev container ready. Run make install to install all dependencies.'",
+  "postStartCommand": "echo 'CP'\''S Dynamics Commerce System AgenticOS Development Environment is ready.'"
 }

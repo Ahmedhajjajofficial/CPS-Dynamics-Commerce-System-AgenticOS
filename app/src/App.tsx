@@ -1,5 +1,5 @@
 /**
- * CPS Enterprise DCS - Main Application
+ * CP'S Dynamics Commerce System AgenticOS - Main Application
  * Material3 Liquid Glass Design System
  * Copyright 2026 Ahmed Hajjaj - CP'S Enterprise Tech Solutions
  */

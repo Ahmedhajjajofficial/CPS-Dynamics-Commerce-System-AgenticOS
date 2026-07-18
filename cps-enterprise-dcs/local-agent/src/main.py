@@ -1,7 +1,7 @@
 """
 Local Agent Entry Point
 =======================
-Main entry point for the CP'S Enterprise DCS Local Agent.
+Main entry point for the CP'S Dynamics Commerce System AgenticOS Local Agent.
 
 Usage:
     python -m local_agent.main --branch-id BR001 --region R001
@@ -61,7 +61,7 @@ async def run_agent(config: AgentConfig):
         
         print(f"""
 ╔══════════════════════════════════════════════════════════════╗
-║     CP'S Enterprise DCS - Local Agent                        ║
+║     CP'S Dynamics Commerce System AgenticOS - Local Agent    ║
 ║                                                              ║
 ║  Agent ID:  {config.agent_id:<45} ║
 ║  Branch:    {config.branch_id:<45} ║

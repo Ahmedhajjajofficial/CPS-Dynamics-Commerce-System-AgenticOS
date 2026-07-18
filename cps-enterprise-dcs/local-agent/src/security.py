@@ -23,11 +23,10 @@ import hashlib
 import hmac
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, Tuple
-from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives.asymmetric import rsa, padding, ec
+from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.backends import default_backend
 import base64
 import json
@@ -48,18 +47,19 @@ class EncryptedPayload:
     """Encrypted payload with all necessary metadata."""
     encrypted_data: bytes
     encrypted_dek: bytes
+    dek_auth_tag: bytes  # Store the auth tag for DEK decryption
     kms_key_id: str
     iv: bytes
     auth_tag: bytes
     hmac_signature: str
-    schema_version: int = 1
+    schema_version: int = 2  # Bumped version for new field
     encrypted_inner_layer: Optional[bytes] = None
     inner_key_derivation: Optional[str] = None
     compliance_proof: Optional[bytes] = None
     audit_trail_hash: Optional[str] = None
     
     # Fields that are always base64-encoded in serialized form
-    _B64_REQUIRED_FIELDS = ("encrypted_data", "encrypted_dek", "iv", "auth_tag")
+    _B64_REQUIRED_FIELDS = ("encrypted_data", "encrypted_dek", "dek_auth_tag", "iv", "auth_tag")
     _B64_OPTIONAL_FIELDS = ("encrypted_inner_layer", "compliance_proof")
     
     def to_dict(self) -> Dict[str, Any]:
@@ -79,16 +79,24 @@ class EncryptedPayload:
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'EncryptedPayload':
+        # Handle migration from old schema (v1) to new schema (v2)
+        schema_version = data.get("schema_version", 1)
+        
         decoded: Dict[str, Any] = {}
         for field_name in cls._B64_REQUIRED_FIELDS:
-            decoded[field_name] = base64.b64decode(data[field_name])
+            if field_name in data:
+                decoded[field_name] = base64.b64decode(data[field_name])
+            elif field_name == "dek_auth_tag" and schema_version == 1:
+                # Backward compatibility: generate from encrypted_dek if missing
+                encrypted_dek = base64.b64decode(data["encrypted_dek"])
+                decoded[field_name] = encrypted_dek[-16:] if len(encrypted_dek) >= 16 else b'\x00' * 16
         for field_name in cls._B64_OPTIONAL_FIELDS:
             decoded[field_name] = _b64_decode(data.get(field_name))
         return cls(
             **decoded,
             kms_key_id=data["kms_key_id"],
             hmac_signature=data["hmac_signature"],
-            schema_version=data.get("schema_version", 1),
+            schema_version=schema_version,
             inner_key_derivation=data.get("inner_key_derivation"),
             audit_trail_hash=data.get("audit_trail_hash")
         )
@@ -197,10 +205,14 @@ class CryptoManager:
         auth_tag = encrypted_data[-16:]
         ciphertext = encrypted_data[:-16]
         
-        # Encrypt DEK with KEK
+        # Encrypt DEK with KEK and store auth tag separately
         kek = self._keks.get(kek_id, self._keks["default"])
         kek_cipher = AESGCM(kek)
-        encrypted_dek = kek_cipher.encrypt(iv, dek, None)[:-16]  # Remove auth tag
+        encrypted_dek_with_tag = kek_cipher.encrypt(iv, dek, None)
+        
+        # Split encrypted DEK and its auth tag
+        dek_auth_tag = encrypted_dek_with_tag[-16:]
+        encrypted_dek = encrypted_dek_with_tag[:-16]
         
         # Calculate HMAC on metadata
         hmac_signature = self._calculate_hmac(metadata, kek)
@@ -221,11 +233,12 @@ class CryptoManager:
         return EncryptedPayload(
             encrypted_data=ciphertext,
             encrypted_dek=encrypted_dek,
+            dek_auth_tag=dek_auth_tag,
             kms_key_id=kek_id,
             iv=iv,
             auth_tag=auth_tag,
             hmac_signature=hmac_signature,
-            schema_version=1,
+            schema_version=2,  # Updated schema version
             encrypted_inner_layer=encrypted_inner,
             inner_key_derivation=inner_kdf,
             compliance_proof=None,  # TODO: Implement ZKP
@@ -257,9 +270,13 @@ class CryptoManager:
         if not hmac.compare_digest(payload.hmac_signature, expected_hmac):
             raise ValueError("HMAC verification failed - data may be tampered")
         
-        # Decrypt DEK
+        # Decrypt DEK using the stored auth tag
         kek_cipher = AESGCM(kek)
-        dek = kek_cipher.decrypt(payload.iv, payload.encrypted_dek + b'\x00' * 16, None)
+        dek = kek_cipher.decrypt(
+            payload.iv, 
+            payload.encrypted_dek + payload.dek_auth_tag, 
+            None
+        )
         
         # Decrypt data
         aesgcm = AESGCM(dek)

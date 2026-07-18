@@ -1,7 +1,7 @@
 /*
 Regional Agent - The Regional Brain
 ===================================
-Coordinates multiple branch agents within a region.
+Coordinates multiple branch agents within a region for CP'S Dynamics Commerce System AgenticOS.
 
 Responsibilities:
 - Aggregate data from branch agents
@@ -130,6 +130,9 @@ func main() {
 ║  Press Ctrl+C to shutdown                                    ║
 ╚══════════════════════════════════════════════════════════════╝
 `, cfg.AgentID, cfg.RegionID, cfg.RPCAddress, cfg.RaftAddress, cfg.GRPCPort)
+
+	// Add system info to startup banner
+	logger.Info("CP'S Dynamics Commerce System AgenticOS - Regional Agent started")
 
 	// Wait for shutdown signal
 	sigCh := make(chan os.Signal, 1)

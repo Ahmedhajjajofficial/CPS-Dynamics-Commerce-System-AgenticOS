@@ -23,6 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     gnupg \
     lsb-release \
+    sqlite3 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -61,9 +62,10 @@ RUN python3 -m venv $VIRTUAL_ENV \
     && chown -R vscode:vscode $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# Install Python tools
+# Install Python dependencies
 RUN pip install --upgrade pip setuptools wheel \
-    && pip install grpcio-tools black ruff pytest
+    && pip install grpcio grpcio-tools cryptography protobuf \
+    && pip install black ruff pytest pytest-asyncio
 
 # Create workspace directory with proper permissions
 RUN mkdir -p /workspaces && chown -R vscode:vscode /workspaces

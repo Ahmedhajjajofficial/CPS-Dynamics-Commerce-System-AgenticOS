@@ -37,6 +37,7 @@ import logging
 import threading
 import asyncio
 from pathlib import Path
+from contextlib import contextmanager
 
 logger = logging.getLogger("EventStore")
 
@@ -176,11 +177,37 @@ class SQLiteEventStore(EventStore):
         self._initialize_db()
     
     def _get_connection(self) -> sqlite3.Connection:
-        """Get thread-local database connection."""
+        """Get thread-local database connection with proper resource management."""
         if not hasattr(self._local, 'connection') or self._local.connection is None:
-            self._local.connection = sqlite3.connect(self.db_path, check_same_thread=False)
-            self._local.connection.row_factory = sqlite3.Row
+            # Enable WAL mode for better concurrency and performance
+            conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=30.0)
+            conn.row_factory = sqlite3.Row
+            # Enable WAL mode for better concurrency
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("PRAGMA cache_size=10000")
+            conn.execute("PRAGMA temp_store=MEMORY")
+            self._local.connection = conn
         return self._local.connection
+    
+    def close_connection(self) -> None:
+        """Close thread-local database connection. Call this when thread is done."""
+        if hasattr(self._local, 'connection') and self._local.connection is not None:
+            try:
+                self._local.connection.close()
+            except Exception as exc:
+                logger.warning(f"Error closing database connection: {exc}")
+            finally:
+                self._local.connection = None
+    
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensure resources are cleaned up."""
+        self.close_connection()
+        return False  # Don't suppress exceptions
     
     @contextmanager
     def _cursor(self, *, commit: bool = False):

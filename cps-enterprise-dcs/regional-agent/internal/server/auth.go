@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/cps-enterprise/dcs/regional-agent/internal/agent"
-	pb "github.com/cps-enterprise/dcs/regional-agent/internal/proto"
 	"github.com/cps-enterprise/dcs/regional-agent/internal/store"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -27,6 +26,7 @@ type AuthInterceptor struct {
 }
 
 // NewAuthInterceptor creates a new AuthInterceptor.
+// In production, allowed MUST be non-empty; otherwise all requests are rejected.
 func NewAuthInterceptor(a *agent.RegionalAgent, store *store.Store, logger *zap.Logger, allowed map[string]struct{}) *AuthInterceptor {
 	if allowed == nil {
 		allowed = make(map[string]struct{})
@@ -59,6 +59,8 @@ func (a *AuthInterceptor) UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 			if _, ok := a.allowed[agentID]; !ok {
 				return nil, status.Error(codes.PermissionDenied, "agent not authorized")
 			}
+		} else {
+			return nil, status.Error(codes.PermissionDenied, "no authorized agents configured")
 		}
 
 		if a.store != nil {
@@ -91,6 +93,8 @@ func (a *AuthInterceptor) StreamServerInterceptor() grpc.StreamServerInterceptor
 			if _, ok := a.allowed[agentID]; !ok {
 				return status.Error(codes.PermissionDenied, "agent not authorized")
 			}
+		} else {
+			return status.Error(codes.PermissionDenied, "no authorized agents configured")
 		}
 
 		if a.store != nil {

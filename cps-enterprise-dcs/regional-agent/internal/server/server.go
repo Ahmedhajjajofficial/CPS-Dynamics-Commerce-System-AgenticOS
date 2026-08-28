@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/cps-enterprise/dcs/regional-agent/internal/agent"
+	"github.com/cps-enterprise/dcs/regional-agent/internal/store"
 	pb "github.com/cps-enterprise/dcs/regional-agent/internal/proto"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"

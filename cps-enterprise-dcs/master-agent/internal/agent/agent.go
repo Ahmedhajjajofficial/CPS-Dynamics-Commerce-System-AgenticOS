@@ -178,6 +178,16 @@ func (a *MasterAgent) GetState() AgentState {
 	return a.state
 }
 
+// Logger returns the logger instance
+func (a *MasterAgent) Logger() *zap.Logger {
+	return a.logger
+}
+
+// Config returns the agent configuration
+func (a *MasterAgent) Config() *config.Config {
+	return a.config
+}
+
 func (a *MasterAgent) setState(state AgentState) {
 	a.stateMu.Lock()
 	defer a.stateMu.Unlock()

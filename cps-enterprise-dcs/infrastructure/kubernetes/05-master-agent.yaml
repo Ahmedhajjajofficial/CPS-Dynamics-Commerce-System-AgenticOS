@@ -1,0 +1,149 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: master-agent
+  namespace: dcs
+  labels:
+    app: master-agent
+    component: orchestrator
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: master-agent
+  template:
+    metadata:
+      labels:
+        app: master-agent
+        component: orchestrator
+    spec:
+      serviceAccountName: dcs-master-agent
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: master-agent
+        image: cps-enterprise-dcs/master-agent:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 50053
+          name: grpc
+          protocol: TCP
+        - containerPort: 8080
+          name: health
+          protocol: TCP
+        env:
+        - name: DCS_AGENT_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: DCS_REGION_ID
+          value: "global"
+        - name: DCS_GRPC_PORT
+          value: "50053"
+        - name: DCS_POSTGRESQL_URL
+          valueFrom:
+            secretKeyRef:
+              name: dcs-secrets
+              key: POSTGRES_URL
+        - name: DCS_KAFKA_BROKERS
+          valueFrom:
+            configMapKeyRef:
+              name: dcs-config
+              key: KAFKA_BROKERS
+        - name: DCS_ENV
+          value: "production"
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: "2"
+            memory: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: tls-certs
+          mountPath: /etc/tls/certs
+          readOnly: true
+        - name: tls-ca
+          mountPath: /etc/tls/ca
+          readOnly: true
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: tls-certs
+        secret:
+          secretName: master-agent-tls
+      - name: tls-ca
+        secret:
+          secretName: dcs-ca-cert
+      - name: data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: master-agent
+  namespace: dcs
+  labels:
+    app: master-agent
+spec:
+  type: ClusterIP
+  ports:
+  - port: 50053
+    targetPort: 50053
+    protocol: TCP
+    name: grpc
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: health
+  selector:
+    app: master-agent
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dcs-master-agent
+  namespace: dcs
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dcs-master-agent
+  namespace: dcs
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dcs-master-agent
+  namespace: dcs
+subjects:
+- kind: ServiceAccount
+  name: dcs-master-agent
+  namespace: dcs
+roleRef:
+  kind: Role
+  name: dcs-master-agent
+  apiGroup: rbac.authorization.k8s.io

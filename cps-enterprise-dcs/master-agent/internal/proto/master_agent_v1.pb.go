@@ -4,14 +4,445 @@
 package proto
 
 import (
-	"fmt"
+	"context"
+
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func init() {
-	if p, ok := interface{}(nil).(interface{ Is(fmt.Scanner) bool }); !ok || !p.Is(nil) {
-		panic("package proto: pb.go missing imports")
-	}
+// ReconciliationJob represents a reconciliation job
+type ReconciliationJob struct {
+	JobId     string
+	RegionId  string
+	BranchIds []string
+	StartTimestamp int64
+	EndTimestamp int64
+	Type      ReconciliationType
+	Status    ReconciliationStatus
+	CreatedAt *timestamppb.Timestamp
+	CompletedAt *timestamppb.Timestamp
+	RequestedBy string
+	ResultSummary []byte
 }
 
-// Placeholder: run `make proto` or protoc to regenerate
-// master_agent_v1.pb.go from master_agent_v1.proto
+type ReconciliationType int32
+type ReconciliationStatus int32
+
+const (
+	ReconciliationType_RECONCILIATION_DAILY ReconciliationType = iota
+	ReconciliationType_RECONCILIATION_WEEKLY
+	ReconciliationType_RECONCILIATION_MONTHLY
+	ReconciliationType_RECONCILIATION_ADHOC
+	ReconciliationType_RECONCILIATION_CROSS_REGION
+)
+
+const (
+	ReconciliationStatus_RECONCILIATION_PENDING ReconciliationStatus = iota
+	ReconciliationStatus_RECONCILIATION_IN_PROGRESS
+	ReconciliationStatus_RECONCILIATION_COMPLETED
+	ReconciliationStatus_RECONCILIATION_FAILED
+	ReconciliationStatus_RECONCILIATION_DISPUTED
+)
+
+// ReconciliationResult represents a reconciliation result
+type ReconciliationResult struct {
+	JobId          string
+	IsBalanced     bool
+	TotalExpected  float64
+	TotalActual    float64
+	Discrepancy    float64
+	BranchDiscrepancies []*BranchDiscrepancy
+	ValidationSignature string
+	CompletedAt    *timestamppb.Timestamp
+}
+
+type BranchDiscrepancy struct {
+	BranchId        string
+	ExpectedBalance float64
+	ActualBalance   float64
+	Discrepancy     float64
+	MissingEventIds []string
+	DuplicateEventIds []string
+	Resolution      string
+}
+
+// ReconciliationStatusRequest represents a reconciliation status request
+type ReconciliationStatusRequest struct {
+	JobId string
+}
+
+// ReconciliationHistoryRequest represents a reconciliation history request
+type ReconciliationHistoryRequest struct {
+	RegionId string
+	StartDate int64
+	EndDate int64
+	Limit    int32
+	Cursor   string
+}
+
+// ReconciliationHistoryResponse represents a reconciliation history response
+type ReconciliationHistoryResponse struct {
+	Jobs     []*ReconciliationJob
+	NextCursor string
+	HasMore  bool
+}
+
+// BranchValidationRequest represents a branch validation request
+type BranchValidationRequest struct {
+	BranchId string
+	RegionId string
+}
+
+// BranchValidationResponse represents a branch validation response
+type BranchValidationResponse struct {
+	IsValid             bool
+	LastKnownEventVersion int64
+	CurrentEventVersion  int64
+	HasGaps             bool
+	MissingVersions     []int64
+	ValidationSummary   string
+}
+
+// DecisionRequest represents a decision request
+type DecisionRequest struct {
+	DecisionId       string
+	AgentId          string
+	BranchId         string
+	Type             DecisionType
+	Context          []byte
+	ConfidenceThreshold float32
+}
+
+type DecisionType int32
+
+const (
+	DecisionType_INVENTORY_REORDER DecisionType = iota
+	DecisionType_PRICE_ADJUSTMENT
+	DecisionType_STAFF_SCHEDULING
+	DecisionType_MAINTENANCE_ALERT
+	DecisionType_FRAUD_DETECTION
+	DecisionType_CUSTOMER_ENGAGEMENT
+)
+
+// DecisionResponse represents a decision response
+type DecisionResponse struct {
+	DecisionId     string
+	Approved       bool
+	Decision       string
+	Reasoning      string
+	ConfidenceScore float32
+	DecidedAt      *timestamppb.Timestamp
+	DecidedBy      string
+}
+
+// DecisionHistoryRequest represents a decision history request
+type DecisionHistoryRequest struct {
+	AgentId  string
+	BranchId string
+	StartDate int64
+	EndDate   int64
+	Limit     int32
+}
+
+// DecisionHistoryResponse represents a decision history response
+type DecisionHistoryResponse struct {
+	Decisions  []*AgentDecision
+	NextCursor string
+	HasMore    bool
+}
+
+// AgentDecision represents an agent decision
+type AgentDecision struct {
+	DecisionId     string
+	AgentId        string
+	DecisionType   DecisionType
+	DecisionContext []byte
+	ConfidenceScore float32
+	ReasoningSteps []string
+	ActionPayload  []byte
+	DecidedAt      *timestamppb.Timestamp
+}
+
+// ForecastEvaluationRequest represents a forecast evaluation request
+type ForecastEvaluationRequest struct {
+	BranchId        string
+	ModelVersion    string
+	EvaluationStart int64
+	EvaluationEnd   int64
+}
+
+// ForecastEvaluationResponse represents a forecast evaluation response
+type ForecastEvaluationResponse struct {
+	EvaluationId  string
+	Mae           float32
+	Rmse          float32
+	Mape          float32
+	SampleCount   int32
+	ModelVersion  string
+	EvaluatedAt   *timestamppb.Timestamp
+}
+
+// RegionalAgentRegistration represents a regional agent registration
+type RegionalAgentRegistration struct {
+	AgentId      string
+	RegionId     string
+	RpcAddress   string
+	RaftAddress  string
+	Capabilities []string
+	PublicKey    []byte
+}
+
+// RegistrationResponse represents a registration response
+type RegistrationResponse struct {
+	Success       bool
+	MasterAgentId string
+	RegisteredAt  *timestamppb.Timestamp
+	SessionToken  string
+}
+
+// HeartbeatRequest represents a heartbeat request
+type HeartbeatRequest struct {
+	AgentId         string
+	RegionId        string
+	Status          AgentStatus
+	ActiveBranches  int64
+	PendingEvents   int64
+	Timestamp       *timestamppb.Timestamp
+}
+
+type AgentStatus int32
+
+const (
+	AgentStatus_AGENT_INITIALIZING AgentStatus = iota
+	AgentStatus_AGENT_ACTIVE
+	AgentStatus_AGENT_DEGRADED
+	AgentStatus_AGENT_OFFLINE
+	AgentStatus_AGENT_SHUTDOWN
+)
+
+// HeartbeatResponse represents a heartbeat response
+type HeartbeatResponse struct {
+	Acknowledged           bool
+	MasterInstruction      string
+	PendingTasks           []string
+	NextHeartbeatDeadline  *timestamppb.Timestamp
+}
+
+// GlobalStateRequest represents a global state request
+type GlobalStateRequest struct {
+	RegionId       string
+	IncludeBranches bool
+	IncludeEvents  bool
+}
+
+// GlobalStateResponse represents a global state response
+type GlobalStateResponse struct {
+	MasterAgentId  string
+	TotalRegions   int64
+	TotalBranches  int64
+	TotalEvents    int64
+	Regions        []*RegionalAgentInfo
+	SnapshotTime   *timestamppb.Timestamp
+}
+
+// RegionalAgentInfo represents a regional agent info
+type RegionalAgentInfo struct {
+	AgentId      string
+	RegionId     string
+	Status       AgentStatus
+	BranchCount  int64
+	EventCount   int64
+	LastHeartbeat *timestamppb.Timestamp
+}
+
+// MasterDecision represents a master decision
+type MasterDecision struct {
+	DecisionId     string
+	Type           DecisionType
+	TargetRegionId string
+	TargetBranchId string
+	DecisionPayload []byte
+	Reasoning      string
+	TtlSeconds     int64
+	CreatedAt      *timestamppb.Timestamp
+}
+
+// PropagationResult represents a propagation result
+type PropagationResult struct {
+	DecisionId     string
+	Acknowledged   bool
+	AgentId        string
+	ErrorMessage   string
+	AcknowledgedAt *timestamppb.Timestamp
+}
+
+// RegionalEventPublication represents a regional event publication
+type RegionalEventPublication struct {
+	RegionId      string
+	BranchId      string
+	EventId       string
+	EventType     string
+	EventPayload  []byte
+	OccurredAt    *timestamppb.Timestamp
+	ReceivedAt    *timestamppb.Timestamp
+	KafkaTopic    string
+	KafkaPartition int32
+	KafkaOffset   int64
+}
+
+// PublicationResult represents a publication result
+type PublicationResult struct {
+	Success      bool
+	Topic        string
+	Partition    int32
+	Offset       int64
+	ErrorMessage string
+}
+
+// SubscriptionRequest represents a subscription request
+type SubscriptionRequest struct {
+	SubscriberId    string
+	EventTypes      []string
+	RegionFilter    string
+	IncludeHistorical bool
+}
+
+// MasterEvent represents a master event
+type MasterEvent struct {
+	EventId        string
+	SourceRegionId string
+	SourceBranchId string
+	EventType      string
+	EventPayload   []byte
+	OccurredAt     *timestamppb.Timestamp
+	Topic          string
+	Partition      int32
+	Offset         int64
+}
+
+// EventStatsRequest represents an event stats request
+type EventStatsRequest struct {
+	RegionId  string
+	StartTime int64
+	EndTime   int64
+}
+
+// EventStatsResponse represents an event stats response
+type EventStatsResponse struct {
+	TotalEvents     int64
+	EventsByType    map[string]int64
+	EventsByBranch  map[string]int64
+	EventsPerSecond float32
+	GeneratedAt     *timestamppb.Timestamp
+}
+
+// AgentCertificate represents an agent certificate
+type AgentCertificate struct {
+	AgentId          string
+	CertificatePem   string
+	PrivateKeyPem    string
+	CaCertificatePem string
+	ExpiresAt        *timestamppb.Timestamp
+}
+
+// mTLSHandshake represents an mTLS handshake
+type mTLSHandshake struct {
+	AgentId               string
+	CertificateFingerprint string
+	Signature             []byte
+	Timestamp             *timestamppb.Timestamp
+}
+
+// Service interfaces for gRPC registration
+type GlobalReconciliationServiceServer interface {
+	TriggerReconciliation(context.Context, *ReconciliationJob) (*ReconciliationResult, error)
+	GetReconciliationStatus(context.Context, *ReconciliationStatusRequest) (*ReconciliationJob, error)
+	ListReconciliationHistory(context.Context, *ReconciliationHistoryRequest) (*ReconciliationHistoryResponse, error)
+	ValidateBranchState(context.Context, *BranchValidationRequest) (*BranchValidationResponse, error)
+}
+
+type DecisionEngineServiceServer interface {
+	SubmitDecision(context.Context, *DecisionRequest) (*DecisionResponse, error)
+	GetDecision(context.Context, *DecisionRequest) (*AgentDecision, error)
+	ListDecisions(context.Context, *DecisionHistoryRequest) (*DecisionHistoryResponse, error)
+	EvaluateForecast(context.Context, *ForecastEvaluationRequest) (*ForecastEvaluationResponse, error)
+}
+
+type MasterCoordinationServiceServer interface {
+	RegisterRegionalAgent(context.Context, *RegionalAgentRegistration) (*RegistrationResponse, error)
+	Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error)
+	GetGlobalState(context.Context, *GlobalStateRequest) (*GlobalStateResponse, error)
+	PropagateDecision(context.Context, *MasterDecision) (*PropagationResult, error)
+}
+
+type EventStreamingServiceServer interface {
+	PublishRegionalEvent(context.Context, *RegionalEventPublication) (*PublicationResult, error)
+	SubscribeToMasterEvents(*SubscriptionRequest, EventStreamingService_SubscribeToMasterEventsServer) error
+	GetEventStats(context.Context, *EventStatsRequest) (*EventStatsResponse, error)
+}
+
+type EventStreamingService_SubscribeToMasterEventsServer interface {
+	Send(*MasterEvent) error
+	Context() context.Context
+}
+
+// Unimplemented servers for forward compatibility
+type UnimplementedGlobalReconciliationServiceServer struct{}
+type UnimplementedDecisionEngineServiceServer struct{}
+type UnimplementedMasterCoordinationServiceServer struct{}
+type UnimplementedEventStreamingServiceServer struct{}
+
+func (UnimplementedGlobalReconciliationServiceServer) TriggerReconciliation(ctx context.Context, req *ReconciliationJob) (*ReconciliationResult, error) {
+	return nil, nil
+}
+func (UnimplementedGlobalReconciliationServiceServer) GetReconciliationStatus(ctx context.Context, req *ReconciliationStatusRequest) (*ReconciliationJob, error) {
+	return nil, nil
+}
+func (UnimplementedGlobalReconciliationServiceServer) ListReconciliationHistory(ctx context.Context, req *ReconciliationHistoryRequest) (*ReconciliationHistoryResponse, error) {
+	return nil, nil
+}
+func (UnimplementedGlobalReconciliationServiceServer) ValidateBranchState(ctx context.Context, req *BranchValidationRequest) (*BranchValidationResponse, error) {
+	return nil, nil
+}
+
+func (UnimplementedDecisionEngineServiceServer) SubmitDecision(ctx context.Context, req *DecisionRequest) (*DecisionResponse, error) {
+	return nil, nil
+}
+func (UnimplementedDecisionEngineServiceServer) GetDecision(ctx context.Context, req *DecisionRequest) (*AgentDecision, error) {
+	return nil, nil
+}
+func (UnimplementedDecisionEngineServiceServer) ListDecisions(ctx context.Context, req *DecisionHistoryRequest) (*DecisionHistoryResponse, error) {
+	return nil, nil
+}
+func (UnimplementedDecisionEngineServiceServer) EvaluateForecast(ctx context.Context, req *ForecastEvaluationRequest) (*ForecastEvaluationResponse, error) {
+	return nil, nil
+}
+
+func (UnimplementedMasterCoordinationServiceServer) RegisterRegionalAgent(ctx context.Context, req *RegionalAgentRegistration) (*RegistrationResponse, error) {
+	return nil, nil
+}
+func (UnimplementedMasterCoordinationServiceServer) Heartbeat(ctx context.Context, req *HeartbeatRequest) (*HeartbeatResponse, error) {
+	return nil, nil
+}
+func (UnimplementedMasterCoordinationServiceServer) GetGlobalState(ctx context.Context, req *GlobalStateRequest) (*GlobalStateResponse, error) {
+	return nil, nil
+}
+func (UnimplementedMasterCoordinationServiceServer) PropagateDecision(ctx context.Context, req *MasterDecision) (*PropagationResult, error) {
+	return nil, nil
+}
+
+func (UnimplementedEventStreamingServiceServer) PublishRegionalEvent(ctx context.Context, req *RegionalEventPublication) (*PublicationResult, error) {
+	return nil, nil
+}
+func (UnimplementedEventStreamingServiceServer) SubscribeToMasterEvents(req *SubscriptionRequest, srv EventStreamingService_SubscribeToMasterEventsServer) error {
+	return nil
+}
+func (UnimplementedEventStreamingServiceServer) GetEventStats(ctx context.Context, req *EventStatsRequest) (*EventStatsResponse, error) {
+	return nil, nil
+}
+
+// Registration helpers
+func RegisterGlobalReconciliationServiceServer(s *grpc.Server, srv GlobalReconciliationServiceServer) {}
+func RegisterDecisionEngineServiceServer(s *grpc.Server, srv DecisionEngineServiceServer) {}
+func RegisterMasterCoordinationServiceServer(s *grpc.Server, srv MasterCoordinationServiceServer) {}
+func RegisterEventStreamingServiceServer(s *grpc.Server, srv EventStreamingServiceServer) {}

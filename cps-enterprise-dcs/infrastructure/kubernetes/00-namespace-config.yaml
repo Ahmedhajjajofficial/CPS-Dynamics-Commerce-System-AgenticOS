@@ -1,0 +1,33 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dcs
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dcs-config
+  namespace: dcs
+data:
+  POSTGRES_USER: "dcs_admin"
+  POSTGRES_DB: "dcs_eventstore"
+  REDIS_PORT: "6379"
+  REGIONAL_AGENT_ID: "regional-001"
+  REGION_ID: "region-001"
+  LOCAL_AGENT_ID: "local-001"
+  BRANCH_ID: "BR001"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dcs-secrets
+  namespace: dcs
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: "CHANGE_ME_SET_A_STRONG_PASSWORD_MIN_16_CHARS"
+  REDIS_PASSWORD: "CHANGE_ME_SET_A_STRONG_PASSWORD"
+  VAULT_TOKEN: "CHANGE_ME_SET_A_STRONG_UNIQUE_VAULT_TOKEN"
+  GRAFANA_PASSWORD: "CHANGE_ME_SET_A_STRONG_PASSWORD"

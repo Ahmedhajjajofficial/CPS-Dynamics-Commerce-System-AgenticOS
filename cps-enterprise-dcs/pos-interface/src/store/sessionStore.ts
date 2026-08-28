@@ -1,12 +1,13 @@
 /**
  * Session Store - Zustand
  * =======================
- * Manages the cashier session state.
+ * Manages the cashier session state with API integration.
  */
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Session, User, SyncStatus } from '../types';
+import { apiService } from '../services/api';
 
 interface SessionState {
   // Current session
@@ -19,8 +20,8 @@ interface SessionState {
   // Actions
   login: (user: User) => void;
   logout: () => void;
-  startSession: (openingBalance: number, registerId: string) => void;
-  endSession: (closingBalance: number) => void;
+  startSession: (openingBalance: number, registerId: string) => Promise<void>;
+  endSession: (closingBalance: number) => Promise<void>;
   updateSyncStatus: (status: Partial<SyncStatus>) => void;
   incrementTransactionCount: (amount: number) => void;
 }
@@ -48,19 +49,29 @@ export const useSessionStore = create<SessionState>()(
         });
       },
 
-      startSession: (openingBalance, registerId) => {
+      startSession: async (openingBalance, registerId) => {
         const { currentUser } = get();
         if (!currentUser) return;
 
+        const response = await apiService.startSession({
+          cashier_id: currentUser.id,
+          register_id: registerId,
+          opening_balance: openingBalance,
+        });
+
+        if (!response.success || !response.data) {
+          throw new Error(response.error || 'Failed to start session');
+        }
+
         const newSession: Session = {
-          id: `session-${Date.now()}`,
-          cashierId: currentUser.id,
+          id: response.data.session_id,
+          cashierId: response.data.cashier_id,
           cashierName: currentUser.name,
-          registerId,
-          branchId: 'BR001', // TODO: Get from config
-          openingBalance,
-          startedAt: new Date().toISOString(),
-          status: 'active',
+          registerId: response.data.register_id,
+          branchId: 'BR001',
+          openingBalance: response.data.opening_balance,
+          startedAt: response.data.started_at,
+          status: response.data.status as Session['status'],
           transactionCount: 0,
           totalSales: 0
         };
@@ -68,9 +79,19 @@ export const useSessionStore = create<SessionState>()(
         set({ currentSession: newSession });
       },
 
-      endSession: (closingBalance) => {
+      endSession: async (closingBalance) => {
         const { currentSession } = get();
         if (!currentSession) return;
+
+        const response = await apiService.closeSession(currentSession.id, {
+          closing_balance: closingBalance,
+          total_sales: currentSession.totalSales,
+          transaction_count: currentSession.transactionCount,
+        });
+
+        if (!response.success) {
+          throw new Error(response.error || 'Failed to end session');
+        }
 
         set({
           currentSession: {

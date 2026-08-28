@@ -562,8 +562,109 @@ func (a *RegionalAgent) forecastEngine() {
 }
 
 func (a *RegionalAgent) runForecast() {
-	// TODO: Implement time-series forecasting
-	a.logger.Debug("Running forecast")
+	if a.store == nil {
+		a.logger.Debug("Skipping forecast: no PostgreSQL store configured")
+		return
+	}
+
+	ctx := context.Background()
+	branches := a.GetAllBranches()
+
+	for _, branch := range branches {
+		forecast, err := a.computeBranchForecast(ctx, branch.BranchID)
+		if err != nil {
+			a.logger.Error("Failed to compute forecast",
+				zap.String("branch_id", branch.BranchID),
+				zap.Error(err),
+			)
+			continue
+		}
+
+		a.logger.Info("Forecast computed",
+			zap.String("branch_id", branch.BranchID),
+			zap.Float64("predicted_sales", forecast.PredictedSales),
+			zap.String("period", forecast.Period),
+			zap.String("model", forecast.Model),
+		)
+	}
+}
+
+// ForecastResult holds a simple sales forecast for a branch.
+type ForecastResult struct {
+	BranchID       string
+	Period         string
+	PredictedSales float64
+	Model          string
+}
+
+func (a *RegionalAgent) computeBranchForecast(ctx context.Context, branchID string) (ForecastResult, error) {
+	if a.store == nil {
+		return ForecastResult{}, fmt.Errorf("store not configured")
+	}
+
+	rows, err := a.store.Query(ctx, `
+		SELECT date, total_sales
+		FROM projection_sales_summary
+		WHERE branch_id = $1
+		ORDER BY date DESC
+		LIMIT 14
+	`, branchID)
+	if err != nil {
+		return ForecastResult{}, err
+	}
+	defer rows.Close()
+
+	type dailySale struct {
+		date  string
+		sales float64
+	}
+	var history []dailySale
+	for rows.Next() {
+		var ds dailySale
+		if err := rows.Scan(&ds.date, &ds.sales); err != nil {
+			return ForecastResult{}, err
+		}
+		history = append(history, ds)
+	}
+	if err := rows.Err(); err != nil {
+		return ForecastResult{}, err
+	}
+
+	if len(history) == 0 {
+		return ForecastResult{BranchID: branchID, Period: time.Now().UTC().Format("2006-01-02"), Model: "no_data"}, nil
+	}
+
+	predicted := a.exponentialSmoothingForecast(history)
+	nextPeriod := history[0].date
+
+	return ForecastResult{
+		BranchID:       branchID,
+		Period:         nextPeriod,
+		PredictedSales: predicted,
+		Model:          "simple_exponential_smoothing",
+	}, nil
+}
+
+func (a *RegionalAgent) exponentialSmoothingForecast(history []dailySale) float64 {
+	if len(history) == 0 {
+		return 0
+	}
+	if len(history) == 1 {
+		return history[0].sales
+	}
+
+	alpha := 0.3
+	smoothed := history[len(history)-1].sales
+	for i := len(history) - 2; i >= 0; i-- {
+		smoothed = alpha*history[i].sales + (1-alpha)*smoothed
+	}
+	return smoothed
+}
+
+// dailySale is a lightweight view model for forecast history rows.
+type dailySale struct {
+	date  string
+	sales float64
 }
 
 // FSM implements the Raft finite state machine

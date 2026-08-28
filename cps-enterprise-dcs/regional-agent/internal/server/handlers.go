@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"io"
 	"strings"
 	"time"
 
@@ -54,8 +55,8 @@ func (h *SwarmHandler) RequestReconciliation(ctx context.Context, req *pb.Reconc
 	}, nil
 }
 
-// StreamCRDTState handles bidirectional CRDT state synchronization.
-func (h *SwarmHandler) StreamCRDTState(stream pb.AccountingSwarmProtocol_StreamCRDTStateServer) error {
+// StreamCRDTUpdates handles client streaming CRDT state synchronization from branches.
+func (h *SwarmHandler) StreamCRDTUpdates(stream pb.AccountingSwarmProtocol_StreamCRDTUpdatesServer) error {
 	ctx := stream.Context()
 	agentID := ""
 	branchID := ""
@@ -73,6 +74,9 @@ func (h *SwarmHandler) StreamCRDTState(stream pb.AccountingSwarmProtocol_StreamC
 	for {
 		bundle, err := stream.Recv()
 		if err != nil {
+			if err == io.EOF {
+				break
+			}
 			return err
 		}
 
@@ -89,7 +93,7 @@ func (h *SwarmHandler) StreamCRDTState(stream pb.AccountingSwarmProtocol_StreamC
 		return status.Errorf(codes.Internal, "failed to merge CRDT state: %v", err)
 	}
 
-	return stream.Send(&pb.BatchAckResponse{
+	return stream.SendAndClose(&pb.BatchAckResponse{
 		TotalProcessed: int32(len(bundles)),
 		TotalFailed:    0,
 	})

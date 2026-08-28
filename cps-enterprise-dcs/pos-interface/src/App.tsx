@@ -11,29 +11,7 @@ import { Cart } from './components/Cart';
 import { useSessionStore } from './store/sessionStore';
 import { Product, User as UserType } from './types';
 import { formatCurrency } from './utils/currency';
-
-// Mock data - replace with API calls
-const mockProducts: Product[] = [
-  { id: '1', sku: 'PROD001', name: 'Wireless Mouse', price: 29.99, category: 'Electronics', taxRate: 8, isActive: true, stockQuantity: 50 },
-  { id: '2', sku: 'PROD002', name: 'Mechanical Keyboard', price: 89.99, category: 'Electronics', taxRate: 8, isActive: true, stockQuantity: 30 },
-  { id: '3', sku: 'PROD003', name: 'USB-C Cable', price: 12.99, category: 'Accessories', taxRate: 8, isActive: true, stockQuantity: 100 },
-  { id: '4', sku: 'PROD004', name: 'Laptop Stand', price: 45.99, category: 'Accessories', taxRate: 8, isActive: true, stockQuantity: 25 },
-  { id: '5', sku: 'PROD005', name: 'Webcam HD', price: 79.99, category: 'Electronics', taxRate: 8, isActive: true, stockQuantity: 15 },
-  { id: '6', sku: 'PROD006', name: 'Desk Lamp LED', price: 34.99, category: 'Office', taxRate: 8, isActive: true, stockQuantity: 40 },
-  { id: '7', sku: 'PROD007', name: 'Notebook A5', price: 8.99, category: 'Office', taxRate: 8, isActive: true, stockQuantity: 200 },
-  { id: '8', sku: 'PROD008', name: 'Pen Set', price: 15.99, category: 'Office', taxRate: 8, isActive: true, stockQuantity: 80 },
-];
-
-const mockCategories = ['Electronics', 'Accessories', 'Office'];
-
-const mockUser: UserType = {
-  id: 'user1',
-  name: 'John Cashier',
-  email: 'john@rockdeals.com',
-  role: 'cashier',
-  permissions: ['sales', 'refunds'],
-  isActive: true
-};
+import { apiService } from './services/api';
 
 type View = 'sale' | 'products' | 'history' | 'settings';
 
@@ -41,6 +19,10 @@ function App() {
   const [currentView, setCurrentView] = useState<View>('sale');
   const [showLogin, setShowLogin] = useState(true);
   const [showSessionStart, setShowSessionStart] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [productsError, setProductsError] = useState<string | null>(null);
   
   const { 
     currentUser, 
@@ -49,26 +31,80 @@ function App() {
     login, 
     logout, 
     startSession,
-    endSession 
+    endSession,
+    updateSyncStatus
   } = useSessionStore();
+
+  // Load products from API
+  useEffect(() => {
+    const loadProducts = async () => {
+      setLoadingProducts(true);
+      setProductsError(null);
+      const response = await apiService.getProducts();
+      if (response.success && response.data) {
+        setProducts(response.data);
+        const uniqueCategories = Array.from(
+          new Set(response.data.map((p: Product) => p.category).filter(Boolean))
+        ) as string[];
+        setCategories(uniqueCategories);
+      } else {
+        setProductsError(response.error || 'Failed to load products');
+      }
+      setLoadingProducts(false);
+    };
+
+    loadProducts();
+  }, []);
+
+  // Monitor connectivity
+  useEffect(() => {
+    const updateOnlineStatus = () => {
+      updateSyncStatus({ isOnline: navigator.onLine });
+    };
+
+    updateOnlineStatus();
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+
+    return () => {
+      window.removeEventListener('online', updateOnlineStatus);
+      window.removeEventListener('offline', updateOnlineStatus);
+    };
+  }, [updateSyncStatus]);
 
   // Auto-login for demo
   useEffect(() => {
     if (!currentUser) {
-      login(mockUser);
+      login({
+        id: 'user1',
+        name: 'John Cashier',
+        email: 'john@rockdeals.com',
+        role: 'cashier',
+        permissions: ['sales', 'refunds'],
+        isActive: true
+      });
       setShowLogin(false);
       setShowSessionStart(true);
     }
   }, [currentUser, login]);
 
-  const handleStartSession = (openingBalance: number) => {
-    startSession(openingBalance, 'REG001');
-    setShowSessionStart(false);
+  const handleStartSession = async (openingBalance: number) => {
+    try {
+      await startSession(openingBalance, 'REG001');
+      setShowSessionStart(false);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to start session');
+    }
   };
 
-  const handleEndSession = () => {
+  const handleEndSession = async () => {
     if (currentSession) {
-      endSession(currentSession.totalSales);
+      try {
+        await endSession(currentSession.totalSales);
+        alert('Session ended successfully');
+      } catch (error) {
+        alert(error instanceof Error ? error.message : 'Failed to end session');
+      }
     }
   };
 
@@ -101,7 +137,14 @@ function App() {
             />
             <button
               onClick={() => {
-                login(mockUser);
+                login({
+                  id: 'user1',
+                  name: 'John Cashier',
+                  email: 'john@rockdeals.com',
+                  role: 'cashier',
+                  permissions: ['sales', 'refunds'],
+                  isActive: true
+                });
                 setShowLogin(false);
                 setShowSessionStart(true);
               }}
@@ -232,9 +275,19 @@ function App() {
             <>
               {/* Product Grid */}
               <div className="flex-1">
-                <ProductGrid products={mockProducts} categories={mockCategories} />
+                {loadingProducts ? (
+                  <div className="flex items-center justify-center h-full text-gray-500">
+                    Loading products...
+                  </div>
+                ) : productsError ? (
+                  <div className="flex items-center justify-center h-full text-red-500">
+                    {productsError}
+                  </div>
+                ) : (
+                  <ProductGrid products={products} categories={categories} />
+                )}
               </div>
-              
+               
               {/* Cart */}
               <div className="w-96 border-l">
                 <Cart />

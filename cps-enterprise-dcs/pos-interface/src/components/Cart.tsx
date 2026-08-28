@@ -1,11 +1,11 @@
 /**
  * Cart Component
  * ==============
- * Displays and manages the shopping cart.
+ * Displays and manages the shopping cart with real API checkout.
  */
 
 import React, { useState } from 'react';
-import { Minus, Plus, Trash2, User, Tag, Receipt, CreditCard } from 'lucide-react';
+import { Minus, Plus, Trash2, User, Tag, Receipt, CreditCard, Loader2 } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { useSessionStore } from '../store/sessionStore';
 import { formatCurrency, calculateItemTotal, calculateCartDiscountAmount } from '../utils/currency';
@@ -17,17 +17,28 @@ export const Cart: React.FC = () => {
     updateQuantity, 
     updateDiscount, 
     setCartDiscount,
-    clearCart 
+    clearCart,
+    checkout,
+    checkoutStatus,
+    checkoutError,
+    resetCheckoutStatus
   } = useCartStore();
   
   const { currentSession } = useSessionStore();
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [itemDiscountId, setItemDiscountId] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<string>('cash');
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (cart.items.length === 0) return;
-    // TODO: Navigate to payment screen
-    alert('Checkout - Total: ' + formatCurrency(cart.total));
+    
+    const success = await checkout(paymentMethod);
+    if (success) {
+      alert('Payment completed successfully!');
+      resetCheckoutStatus();
+    } else if (checkoutError) {
+      alert(`Payment failed: ${checkoutError}`);
+    }
   };
 
   const handleItemDiscount = (productId: string) => {
@@ -164,15 +175,45 @@ export const Cart: React.FC = () => {
             <span className="text-blue-600">{formatCurrency(cart.total)}</span>
           </div>
 
+          {/* Payment Method */}
+          <div className="mb-4">
+            <label className="block text-sm text-gray-600 mb-1">Payment Method</label>
+            <select
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value)}
+              className="w-full p-2 border rounded-lg"
+            >
+              <option value="cash">Cash</option>
+              <option value="card">Card</option>
+              <option value="mobile">Mobile</option>
+            </select>
+          </div>
+
           {/* Checkout Button */}
           <button
             onClick={handleCheckout}
-            disabled={!currentSession}
+            disabled={!currentSession || checkoutStatus === 'loading'}
             className="w-full py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            <CreditCard className="w-5 h-5" />
-            {currentSession ? 'Proceed to Payment' : 'Start Session First'}
+            {checkoutStatus === 'loading' ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <CreditCard className="w-5 h-5" />
+                {currentSession ? 'Pay Now' : 'Start Session First'}
+              </>
+            )}
           </button>
+
+          {/* Error Message */}
+          {checkoutError && (
+            <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+              {checkoutError}
+            </div>
+          )}
         </div>
       )}
 

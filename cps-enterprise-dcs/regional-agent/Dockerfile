@@ -38,11 +38,11 @@ COPY --from=builder /build/regional-agent .
 RUN mkdir -p /data
 
 # Expose ports
-EXPOSE 12000 12001 50052
+EXPOSE 12000 12001 50052 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:12000/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
 # Run the agent
 CMD ["./regional-agent"]

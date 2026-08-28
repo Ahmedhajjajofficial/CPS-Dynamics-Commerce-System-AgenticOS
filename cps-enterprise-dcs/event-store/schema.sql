@@ -283,12 +283,46 @@ CREATE INDEX IF NOT EXISTS idx_audit_created
     ON audit_log(created_at);
 
 -- Partition audit_log by month
+-- Static initial partitions for 2024
 CREATE TABLE IF NOT EXISTS audit_log_2024_01 PARTITION OF audit_log
     FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');
 CREATE TABLE IF NOT EXISTS audit_log_2024_02 PARTITION OF audit_log
     FOR VALUES FROM ('2024-02-01') TO ('2024-03-01');
 CREATE TABLE IF NOT EXISTS audit_log_2024_03 PARTITION OF audit_log
     FOR VALUES FROM ('2024-03-01') TO ('2024-04-01');
+
+-- Auto-create future monthly partitions on demand
+CREATE OR REPLACE FUNCTION create_audit_partition_if_not_exists()
+RETURNS TRIGGER AS $$
+DECLARE
+    partition_name TEXT;
+    partition_start TEXT;
+    partition_end TEXT;
+BEGIN
+    partition_name := 'audit_log_' || to_char(NEW.created_at, 'YYYY_MM');
+    partition_start := to_char(NEW.created_at, 'YYYY-MM-01');
+    partition_end := to_char(
+        (NEW.created_at + INTERVAL '1 month')::date,
+        'YYYY-MM-01'
+    );
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_class WHERE relname = partition_name
+    ) THEN
+        EXECUTE format(
+            'CREATE TABLE IF NOT EXISTS %I PARTITION OF audit_log FOR VALUES FROM (%L) TO (%L)',
+            partition_name, partition_start, partition_end
+        );
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_auto_audit_partition
+    BEFORE INSERT ON audit_log
+    FOR EACH ROW
+    EXECUTE FUNCTION create_audit_partition_if_not_exists();
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- SECURITY POLICIES

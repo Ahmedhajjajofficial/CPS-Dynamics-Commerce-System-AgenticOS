@@ -16,14 +16,17 @@ type Server struct {
 	agent      *agent.RegionalAgent
 	logger     *zap.Logger
 	grpcServer *grpc.Server
+	store      *store.Store
+	auth       *AuthInterceptor
 }
 
 // New creates a new gRPC server for the regional agent
-func New(a *agent.RegionalAgent, logger *zap.Logger) *Server {
+func New(a *agent.RegionalAgent, logger *zap.Logger, store *store.Store) *Server {
 	s := &Server{
 		agent:      a,
 		logger:     logger,
-		grpcServer: grpc.NewServer(),
+		store:      store,
+		grpcServer: grpc.NewServer(grpc.ChainUnaryInterceptor(authInterceptor(a, store, logger).UnaryServerInterceptor()), grpc.ChainStreamInterceptor(authInterceptor(a, store, logger).StreamServerInterceptor())),
 	}
 
 	// Register handlers
@@ -36,6 +39,15 @@ func New(a *agent.RegionalAgent, logger *zap.Logger) *Server {
 	}
 
 	return s
+}
+
+// authInterceptor builds an AuthInterceptor with a default allow-all set when DCS_ENV is not production.
+func authInterceptor(a *agent.RegionalAgent, store *store.Store, logger *zap.Logger) *AuthInterceptor {
+	allowed := make(map[string]struct{})
+	if os.Getenv("DCS_ENV") != "production" {
+		allowed["*"] = struct{}{}
+	}
+	return NewAuthInterceptor(a, store, logger, allowed)
 }
 
 // Start begins listening for gRPC connections on the given address

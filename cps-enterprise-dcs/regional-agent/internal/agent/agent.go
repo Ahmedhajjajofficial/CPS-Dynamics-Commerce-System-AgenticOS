@@ -26,6 +26,8 @@ import (
 
 	"github.com/cps-enterprise/dcs/regional-agent/internal/config"
 	"github.com/cps-enterprise/dcs/regional-agent/internal/crdt"
+	"github.com/cps-enterprise/dcs/regional-agent/internal/store"
+	pb "github.com/cps-enterprise/dcs/regional-agent/internal/proto"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb/v2"
@@ -74,6 +76,9 @@ type RegionalAgent struct {
 
 	// CRDT management
 	crdtManager *crdt.Manager
+
+	// PostgreSQL store
+	store *store.Store
 
 	// Connected branches
 	branches   map[string]*BranchConnection
@@ -132,6 +137,17 @@ func (a *RegionalAgent) Initialize(ctx context.Context) error {
 	// Initialize CRDT manager
 	a.crdtManager = crdt.NewManager(a.config.AgentID)
 
+	// Initialize PostgreSQL store if configured
+	if a.config.PostgreSQLURL != "" {
+		pgStore, err := store.NewStore(ctx, a.config, a.logger)
+		if err != nil {
+			return fmt.Errorf("failed to connect to PostgreSQL: %w", err)
+		}
+		a.store = pgStore
+	} else {
+		a.logger.Warn("PostgreSQL URL not configured; handlers will return limited data")
+	}
+
 	// Initialize Raft consensus
 	if err := a.initRaft(); err != nil {
 		return fmt.Errorf("failed to initialize raft: %w", err)
@@ -166,6 +182,11 @@ func (a *RegionalAgent) Shutdown(ctx context.Context) error {
 		if err := a.raft.Shutdown().Error(); err != nil {
 			a.logger.Error("Error shutting down raft", zap.Error(err))
 		}
+	}
+
+	// Close PostgreSQL store
+	if a.store != nil {
+		a.store.Close()
 	}
 
 	// Wait for background tasks
@@ -299,6 +320,11 @@ func (a *RegionalAgent) Raft() *raft.Raft {
 	return a.raft
 }
 
+// Store returns the PostgreSQL store (may be nil if not configured).
+func (a *RegionalAgent) Store() *store.Store {
+	return a.store
+}
+
 func (a *RegionalAgent) setState(state State) {
 	a.stateMu.Lock()
 	defer a.stateMu.Unlock()
@@ -374,6 +400,70 @@ func (a *RegionalAgent) ProcessEvent(event *Event) error {
 	case <-time.After(5 * time.Second):
 		return fmt.Errorf("event queue full")
 	}
+}
+
+// MergeCRDTState merges incoming CRDT state from a branch into the regional aggregate.
+func (a *RegionalAgent) MergeCRDTState(ctx context.Context, branchID string, bundles []*pb.CRDTStateBundle) error {
+	for _, bundle := range bundles {
+		var payload map[string]interface{}
+		if err := json.Unmarshal(bundle.SerializedState, &payload); err != nil {
+			return fmt.Errorf("failed to unmarshal CRDT state for %s: %w", bundle.CrdtId, err)
+		}
+
+		switch bundle.CrdtType {
+		case "PNCounter":
+			if counter, ok := payload["increments"].(map[string]interface{}); ok {
+				for node, val := range counter {
+					if f, ok := val.(float64); ok {
+						a.crdtManager.GetOrCreateCounter(bundle.CrdtId).Increment(int64(f))
+					}
+				}
+			}
+			if counter, ok := payload["decrements"].(map[string]interface{}); ok {
+				for node, val := range counter {
+					if f, ok := val.(float64); ok {
+						a.crdtManager.GetOrCreateCounter(bundle.CrdtId).Decrement(int64(f))
+					}
+				}
+			}
+		case "GCounter":
+			if increments, ok := payload["increments"].(map[string]interface{}); ok {
+				for node, val := range increments {
+					if f, ok := val.(float64); ok {
+						a.crdtManager.GetOrCreateCounter(bundle.CrdtId).Increment(int64(f))
+					}
+				}
+			}
+		case "ORSet":
+			if elements, ok := payload["elements"].([]interface{}); ok {
+				orset := a.crdtManager.GetOrCreateSet(bundle.CrdtId)
+				for _, elem := range elements {
+					if em, ok := elem.(map[string]interface{}); ok {
+						val, _ := em["value"].(string)
+						if val != "" && !orset.Contains(val) {
+							orset.Add(val)
+						}
+					}
+				}
+			}
+		case "LWWRegister":
+			if value, ok := payload["value"].(string); ok && value != "" {
+				reg := a.crdtManager.GetOrCreateRegister(bundle.CrdtId)
+				if value != reg.Get() {
+					reg.Set(value)
+				}
+			}
+		}
+
+		if a.store != nil {
+			a.store.InsertAuditLog(ctx, "crdt_merge", branchID, "crdt", bundle.CrdtId, map[string]interface{}{
+				"crdt_type": bundle.CrdtType,
+				"version":   bundle.Version,
+			})
+		}
+	}
+
+	return nil
 }
 
 // Background tasks

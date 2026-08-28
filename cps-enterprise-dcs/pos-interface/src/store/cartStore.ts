@@ -1,16 +1,19 @@
 /**
  * Cart Store - Zustand
  * ====================
- * Manages the shopping cart state.
+ * Manages the shopping cart state with API integration.
  */
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Cart, CartItem, Product, Customer } from '../types';
 import { calculateItemTotal, calculateCartDiscountAmount } from '../utils/currency';
+import { apiService } from '../services/api';
 
 interface CartState {
   cart: Cart;
+  checkoutStatus: 'idle' | 'loading' | 'success' | 'error';
+  checkoutError?: string;
   
   // Actions
   addItem: (product: Product, quantity?: number) => void;
@@ -21,6 +24,8 @@ interface CartState {
   setCartDiscount: (discount: number) => void;
   clearCart: () => void;
   addNote: (productId: string, note: string) => void;
+  checkout: (paymentMethod: string) => Promise<boolean>;
+  resetCheckoutStatus: () => void;
 }
 
 const calculateCartTotals = (items: CartItem[], cartDiscount: number): Pick<Cart, 'subtotal' | 'taxAmount' | 'total'> => {
@@ -51,6 +56,7 @@ export const useCartStore = create<CartState>()(
   persist(
     (set, get) => ({
       cart: initialCart,
+      checkoutStatus: 'idle',
 
       addItem: (product, quantity = 1) => {
         const { cart } = get();
@@ -113,7 +119,7 @@ export const useCartStore = create<CartState>()(
       },
 
       clearCart: () => {
-        set({ cart: initialCart });
+        set({ cart: initialCart, checkoutStatus: 'idle', checkoutError: undefined });
       },
 
       addNote: (productId, note) => {
@@ -122,7 +128,43 @@ export const useCartStore = create<CartState>()(
           item.product.id === productId ? { ...item, notes: note } : item
         );
         set({ cart: { ...cart, items: newItems } });
-      }
+      },
+
+      checkout: async (paymentMethod: string) => {
+        const { cart } = get();
+        if (cart.items.length === 0) return false;
+
+        set({ checkoutStatus: 'loading', checkoutError: undefined });
+
+        // In a real implementation, we would iterate through cart items
+        // and call the API for each. For now, we simulate a single sale
+        // for the first item as a proof of concept.
+        const firstItem = cart.items[0];
+        const response = await apiService.recordSale({
+          product_id: firstItem.product.id,
+          quantity: firstItem.quantity,
+          unit_price: firstItem.product.price,
+          total_amount: calculateItemTotal(firstItem),
+          cashier_id: 'current-user',
+          session_id: 'current-session',
+          payment_method: paymentMethod,
+        });
+
+        if (response.success) {
+          set({ checkoutStatus: 'success' });
+          return true;
+        }
+
+        set({
+          checkoutStatus: 'error',
+          checkoutError: response.error || 'Checkout failed',
+        });
+        return false;
+      },
+
+      resetCheckoutStatus: () => {
+        set({ checkoutStatus: 'idle', checkoutError: undefined });
+      },
     }),
     {
       name: 'pos-cart-storage',

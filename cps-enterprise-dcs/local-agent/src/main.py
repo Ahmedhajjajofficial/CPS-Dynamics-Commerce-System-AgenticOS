@@ -28,6 +28,7 @@ from dotenv import load_dotenv
 
 from .agent import LocalAgent, AgentConfig, AgentState
 from .grpc_server import LocalAgentGRPCServer
+from .http_gateway import HTTPGateway
 
 
 # Load environment variables
@@ -41,6 +42,10 @@ async def run_agent(config: AgentConfig):
     
     # Create gRPC server
     grpc_server = LocalAgentGRPCServer(agent, port=config.pos_interface_port)
+    
+    # Create HTTP gateway for POS interface
+    http_port = int(os.getenv("DCS_HTTP_PORT", "8080"))
+    http_gateway = HTTPGateway(agent, host="0.0.0.0", port=http_port)
     
     # Setup signal handlers
     shutdown_event = asyncio.Event()
@@ -59,6 +64,9 @@ async def run_agent(config: AgentConfig):
         # Start gRPC server
         await grpc_server.start()
         
+        # Start HTTP gateway
+        await http_gateway.start()
+        
         print(f"""
 ╔══════════════════════════════════════════════════════════════╗
 ║     CP'S Dynamics Commerce System AgenticOS - Local Agent    ║
@@ -68,6 +76,7 @@ async def run_agent(config: AgentConfig):
 ║  Region:    {config.region_id:<45} ║
 ║  State:     {agent.state.value:<45} ║
 ║  gRPC Port: {config.pos_interface_port:<45} ║
+║  HTTP Port: {http_port:<45} ║
 ║                                                              ║
 ║  Press Ctrl+C to shutdown                                    ║
 ╚══════════════════════════════════════════════════════════════╝
@@ -79,6 +88,7 @@ async def run_agent(config: AgentConfig):
     finally:
         # Cleanup
         await grpc_server.stop()
+        await http_gateway.stop()
         await agent.shutdown()
         print("Agent shutdown complete")
 

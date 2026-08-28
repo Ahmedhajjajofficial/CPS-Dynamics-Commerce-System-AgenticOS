@@ -42,6 +42,7 @@ import (
 	"github.com/cps-enterprise/dcs/regional-agent/internal/agent"
 	"github.com/cps-enterprise/dcs/regional-agent/internal/config"
 	"github.com/cps-enterprise/dcs/regional-agent/internal/server"
+	"github.com/cps-enterprise/dcs/regional-agent/internal/store"
 	"go.uber.org/zap"
 )
 
@@ -100,14 +101,24 @@ func main() {
 		logger.Fatal("Failed to create agent", zap.Error(err))
 	}
 
+	// Initialize PostgreSQL store for handlers
+	var pgStore *store.Store
+	if cfg.PostgreSQLURL != "" {
+		pgStore, err = store.NewStore(ctx, cfg, logger)
+		if err != nil {
+			logger.Fatal("Failed to connect to PostgreSQL", zap.Error(err))
+		}
+	} else {
+		logger.Warn("PostgreSQL URL not configured; running without database-backed handlers")
+	}
+
 	// Initialize agent
-	ctx := context.Background()
 	if err := regionalAgent.Initialize(ctx); err != nil {
 		logger.Fatal("Failed to initialize agent", zap.Error(err))
 	}
 
 	// Start gRPC server
-	grpcServer := server.New(regionalAgent, logger)
+	grpcServer := server.New(regionalAgent, logger, pgStore)
 	go func() {
 		addr := fmt.Sprintf(":%d", cfg.GRPCPort)
 		logger.Info("Starting gRPC server", zap.String("addr", addr))
@@ -152,6 +163,9 @@ func main() {
 
 	grpcServer.Stop()
 	server.StopHealthServer(healthServer)
+	if pgStore != nil {
+		pgStore.Close()
+	}
 
 	logger.Info("Regional Agent shutdown complete")
 }

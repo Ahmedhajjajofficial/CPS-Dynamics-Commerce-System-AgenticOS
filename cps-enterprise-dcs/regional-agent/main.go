@@ -129,9 +129,9 @@ func main() {
 		}
 	}()
 
-	// Start health HTTP server
+	// Start health/admin HTTP server
 	healthAddr := getEnv("DCS_HEALTH_ADDR", ":8080")
-	healthServer := server.StartHealthServer(healthAddr, regionalAgent, logger)
+	healthServer := server.StartHealthServer(healthAddr, regionalAgent, logger, pgStore)
 
 	// Print startup banner
 	fmt.Printf(`

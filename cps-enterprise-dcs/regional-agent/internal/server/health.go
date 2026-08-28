@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cps-enterprise/dcs/regional-agent/internal/agent"
+	"github.com/cps-enterprise/dcs/regional-agent/internal/store"
 	"go.uber.org/zap"
 )
 
@@ -22,9 +23,27 @@ type HealthResponse struct {
 	Checks    map[string]string `json:"checks,omitempty"`
 }
 
-// StartHealthServer starts a lightweight HTTP health server.
+// BranchSummaryResponse represents the JSON branch summary response.
+type BranchSummaryResponse struct {
+	BranchID         string  `json:"branch_id"`
+	TodaySales       float64 `json:"today_sales"`
+	TodayTransactions int32   `json:"today_transactions"`
+	CurrentBalance   float64 `json:"current_balance"`
+	ActiveSessions   int32   `json:"active_sessions"`
+}
+
+// InventoryStatusResponse represents the JSON inventory status response.
+type InventoryStatusResponse struct {
+	ProductID         string `json:"product_id"`
+	BranchID          string `json:"branch_id"`
+	CurrentQuantity   int32  `json:"current_quantity"`
+	AvailableQuantity int32  `json:"available_quantity"`
+	IsLowStock        bool   `json:"is_low_stock"`
+}
+
+// StartHealthServer starts a lightweight HTTP server for health and admin query endpoints.
 // It returns the server so the caller can shut it down gracefully.
-func StartHealthServer(addr string, regionalAgent *agent.RegionalAgent, logger *zap.Logger) *http.Server {
+func StartHealthServer(addr string, regionalAgent *agent.RegionalAgent, logger *zap.Logger, store *store.Store) *http.Server {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -81,6 +100,85 @@ func StartHealthServer(addr string, regionalAgent *agent.RegionalAgent, logger *
 		}
 	})
 
+	mux.HandleFunc("/api/v1/branches/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		branchID := r.URL.Path[len("/api/v1/branches/"):]
+		if branchID == "" {
+			http.Error(w, "branch_id is required", http.StatusBadRequest)
+			return
+		}
+
+		if store == nil {
+			http.Error(w, "store not configured", http.StatusServiceUnavailable)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
+
+		todaySales, todayTransactions, currentBalance, activeSessions, err := store.GetBranchSummary(ctx, branchID)
+		if err != nil {
+			logger.Error("failed to load branch summary", zap.Error(err), zap.String("branch_id", branchID))
+			http.Error(w, "failed to load branch summary", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(BranchSummaryResponse{
+			BranchID:          branchID,
+			TodaySales:        todaySales,
+			TodayTransactions: todayTransactions,
+			CurrentBalance:    currentBalance,
+			ActiveSessions:    activeSessions,
+		})
+	})
+
+	mux.HandleFunc("/api/v1/inventory/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		productID := r.URL.Path[len("/api/v1/inventory/"):]
+		if productID == "" {
+			http.Error(w, "product_id is required", http.StatusBadRequest)
+			return
+		}
+
+		branchID := r.URL.Query().Get("branch_id")
+		if branchID == "" {
+			branchID = "default"
+		}
+
+		if store == nil {
+			http.Error(w, "store not configured", http.StatusServiceUnavailable)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
+
+		currentQty, availableQty, isLowStock, err := store.GetInventoryStatus(ctx, branchID, productID)
+		if err != nil {
+			logger.Error("failed to load inventory status", zap.Error(err), zap.String("product_id", productID))
+			http.Error(w, "failed to load inventory status", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(InventoryStatusResponse{
+			ProductID:         productID,
+			BranchID:          branchID,
+			CurrentQuantity:   currentQty,
+			AvailableQuantity: availableQty,
+			IsLowStock:        isLowStock,
+		})
+	})
+
 	server := &http.Server{
 		Addr:         addr,
 		Handler:      mux,
@@ -94,19 +192,6 @@ func StartHealthServer(addr string, regionalAgent *agent.RegionalAgent, logger *
 		}
 	}()
 
-	logger.Info("Health server started", zap.String("addr", addr))
+	logger.Info("Health/admin server started", zap.String("addr", addr))
 	return server
-}
-
-// StopHealthServer gracefully stops the health HTTP server.
-func StopHealthServer(server *http.Server) {
-	if server == nil {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := server.Shutdown(ctx); err != nil {
-		// Log only if a real logger is available; ignore shutdown errors during process exit
-		_ = err
-	}
 }

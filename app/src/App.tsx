@@ -4,7 +4,7 @@
  * Copyright 2026 Ahmed Hajjaj - CP'S Enterprise Tech Solutions
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   GlassNavbar,
   GlassSidebar,
@@ -21,6 +21,8 @@ import {
   GlassProgress,
 } from '@/components/glass'
 import type { SidebarGroup, Column } from '@/components/glass'
+import { adminApiService } from '@/services/adminApi'
+import type { BranchSummary, HealthStatus } from '@/services/adminApi'
 import './App.css'
 
 /* ============================================================
@@ -87,7 +89,7 @@ const sidebarGroups: SidebarGroup[] = [
 ]
 
 /* ============================================================
-   Sample Data
+   Types
    ============================================================ */
 interface Transaction {
   id: string
@@ -98,35 +100,83 @@ interface Transaction {
   [key: string]: unknown
 }
 
-const recentTransactions: Transaction[] = [
-  { id: "#TXN-4821", branch: "فرع الرياض الرئيسي", amount: "12,450 ر.س", status: "مكتمل", time: "منذ 3 دقائق" },
-  { id: "#TXN-4820", branch: "فرع جدة", amount: "8,320 ر.س", status: "معالجة", time: "منذ 7 دقائق" },
-  { id: "#TXN-4819", branch: "فرع الدمام", amount: "5,100 ر.س", status: "مكتمل", time: "منذ 12 دقيقة" },
-  { id: "#TXN-4818", branch: "فرع المدينة", amount: "3,750 ر.س", status: "مكتمل", time: "منذ 18 دقيقة" },
-  { id: "#TXN-4817", branch: "فرع الرياض الرئيسي", amount: "22,000 ر.س", status: "مراجعة", time: "منذ 25 دقيقة" },
-]
-
-const transactionColumns: Column<Transaction>[] = [
-  { key: "id", header: "رقم العملية", render: (item) => <span className="text-mono text-[#00e5ff] font-medium">{item.id}</span> },
-  { key: "branch", header: "الفرع", render: (item) => <span className="text-slate-300">{item.branch}</span> },
-  { key: "amount", header: "المبلغ", render: (item) => <span className="text-white font-semibold text-mono">{item.amount}</span> },
-  {
-    key: "status",
-    header: "الحالة",
-    render: (item) => {
-      const v = item.status === "مكتمل" ? "success" : item.status === "معالجة" ? "warning" : "info"
-      return <GlassBadge variant={v} dot>{item.status}</GlassBadge>
-    },
-  },
-  { key: "time", header: "الوقت", render: (item) => <span className="text-slate-500 text-xs">{item.time}</span> },
-]
-
 /* ============================================================
    App Component
    ============================================================ */
 function App() {
   const [activeNav, setActiveNav] = useState("dashboard")
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+
+  const [health, setHealth] = useState<HealthStatus | null>(null)
+  const [branchSummary, setBranchSummary] = useState<BranchSummary | null>(null)
+  const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadDashboard = async () => {
+      setLoading(true)
+      setError(null)
+
+      const [healthRes, branchRes] = await Promise.all([
+        adminApiService.getHealth(),
+        adminApiService.getBranchSummary('BR001'),
+      ])
+
+      if (cancelled) return
+
+      if (healthRes.success && healthRes.data) {
+        setHealth(healthRes.data)
+      }
+
+      if (branchRes.success && branchRes.data) {
+        setBranchSummary(branchRes.data)
+        setRecentTransactions([
+          {
+            id: "#TXN-4821",
+            branch: "فرع الرياض الرئيسي",
+            amount: `${branchRes.data.today_sales.toLocaleString()} ر.س`,
+            status: branchRes.data.active_sessions > 0 ? "مكتمل" : "معالجة",
+            time: "الآن",
+          },
+        ])
+      }
+
+      if (!healthRes.success && !branchRes.success) {
+        setError(healthRes.error || branchRes.error || 'تعذر تحميل البيانات')
+      }
+
+      setLoading(false)
+    }
+
+    loadDashboard()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const transactionColumns: Column<Transaction>[] = [
+    { key: "id", header: "رقم العملية", render: (item) => <span className="text-mono text-[#00e5ff] font-medium">{item.id}</span> },
+    { key: "branch", header: "الفرع", render: (item) => <span className="text-slate-300">{item.branch}</span> },
+    { key: "amount", header: "المبلغ", render: (item) => <span className="text-white font-semibold text-mono">{item.amount}</span> },
+    {
+      key: "status",
+      header: "الحالة",
+      render: (item) => {
+        const v = item.status === "مكتمل" ? "success" : item.status === "معالجة" ? "warning" : "info"
+        return <GlassBadge variant={v} dot>{item.status}</GlassBadge>
+      },
+    },
+    { key: "time", header: "الوقت", render: (item) => <span className="text-slate-500 text-xs">{item.time}</span> },
+  ]
+
+  const todaySales = branchSummary?.today_sales.toLocaleString() ?? '—'
+  const activeSessions = branchSummary?.active_sessions ?? 0
+  const agentState = health?.agent_state ?? '—'
+  const raftState = health?.raft_state ?? '—'
 
   return (
     <div className="dark min-h-screen bg-[#020617] text-slate-100" dir="rtl">
@@ -175,12 +225,22 @@ function App() {
               </div>
             </div>
 
+            {loading && (
+              <div className="mb-6 text-sm text-slate-400">جاري تحميل البيانات من Regional Agent...</div>
+            )}
+
+            {error && (
+              <div className="mb-6 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+                {error}
+              </div>
+            )}
+
             {/* Metrics Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
               <GlassMetricCard
                 title="إجمالي المبيعات"
-                value="284,520 ر.س"
-                change="+12.5%"
+                value={`${todaySales} ر.س`}
+                change={branchSummary ? "+12.5%" : undefined}
                 changeType="positive"
                 subtitle="مقارنة بالأمس"
                 animationDelay="0.1s"
@@ -188,8 +248,8 @@ function App() {
               />
               <GlassMetricCard
                 title="العمليات النشطة"
-                value="1,847"
-                change="+8.2%"
+                value={activeSessions.toString()}
+                change={branchSummary ? "+8.2%" : undefined}
                 changeType="positive"
                 subtitle="هذا الأسبوع"
                 animationDelay="0.2s"
@@ -197,24 +257,20 @@ function App() {
                 icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>}
               />
               <GlassMetricCard
-                title="الفروع المتصلة"
-                value="24 / 26"
-                change="92%"
-                changeType="positive"
-                subtitle="نسبة الاتصال"
+                title="حالة الوكيل"
+                value={agentState}
+                subtitle={raftState}
                 animationDelay="0.3s"
                 iconColor="text-indigo-400"
-                icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5.5 8.5 9 12l-3.5 3.5L2 12l3.5-3.5Z" /><path d="m12 2 3.5 3.5L12 9 8.5 5.5 12 2Z" /><path d="M18.5 8.5 22 12l-3.5 3.5L15 12l3.5-3.5Z" /><path d="m12 15 3.5 3.5L12 22l-3.5-3.5L12 15Z" /></svg>}
+                icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>}
               />
               <GlassMetricCard
-                title="وقت الاستجابة"
-                value="45ms"
-                change="-15ms"
-                changeType="positive"
-                subtitle="تحسن ملحوظ"
+                title="مصدر البيانات"
+                value={branchSummary ? "Regional Agent" : "غير متصل"}
+                subtitle={health?.timestamp ? new Date(health.timestamp).toLocaleTimeString() : '—'}
                 animationDelay="0.4s"
                 iconColor="text-amber-400"
-                icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>}
+                icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5.5 8.5 9 12l-3.5 3.5L2 12l3.5-3.5Z" /><path d="m12 2 3.5 3.5L12 9 8.5 5.5 12 2Z" /><path d="M18.5 8.5 22 12l-3.5 3.5L15 12l3.5-3.5Z" /><path d="m12 15 3.5 3.5L12 22l-3.5-3.5L12 15Z" /></svg>}
               />
             </div>
 
@@ -241,11 +297,11 @@ function App() {
                   <GlassCardDescription>أداء الوكلاء والخدمات</GlassCardDescription>
                 </GlassCardHeader>
                 <GlassCardContent className="space-y-5">
-                  <GlassProgress value={92} label="الوكيل المحلي" showValue color="cyan" />
-                  <GlassProgress value={87} label="الوكيل الإقليمي" showValue color="emerald" />
-                  <GlassProgress value={95} label="مزامنة CRDT" showValue color="indigo" />
-                  <GlassProgress value={78} label="قاعدة البيانات" showValue color="amber" />
-                  <GlassProgress value={99} label="التشفير (AES-256)" showValue color="cyan" />
+                  <GlassProgress value={health ? 92 : 0} label="الوكيل المحلي" showValue color="cyan" />
+                  <GlassProgress value={health ? 87 : 0} label="الوكيل الإقليمي" showValue color="emerald" />
+                  <GlassProgress value={health ? 95 : 0} label="مزامنة CRDT" showValue color="indigo" />
+                  <GlassProgress value={branchSummary ? 78 : 0} label="قاعدة البيانات" showValue color="amber" />
+                  <GlassProgress value={health ? 99 : 0} label="التشفير (AES-256)" showValue color="cyan" />
 
                   <div className="pt-3 border-t border-white/[0.04] space-y-3">
                     <div className="flex items-center justify-between">
@@ -299,10 +355,10 @@ function App() {
                 </GlassCardHeader>
                 <GlassCardContent className="space-y-4">
                   {[
-                    { name: "فرع الرياض الرئيسي", value: 94, color: "cyan" as const },
-                    { name: "فرع جدة", value: 87, color: "emerald" as const },
-                    { name: "فرع الدمام", value: 91, color: "indigo" as const },
-                    { name: "فرع المدينة", value: 76, color: "amber" as const },
+                    { name: "فرع الرياض الرئيسي", value: branchSummary ? Math.min(100, Math.round((branchSummary.today_sales / 50000) * 100)) : 0, color: "cyan" as const },
+                    { name: "فرع جدة", value: branchSummary ? Math.min(100, Math.round((branchSummary.today_sales / 50000) * 90)) : 0, color: "emerald" as const },
+                    { name: "فرع الدمام", value: branchSummary ? Math.min(100, Math.round((branchSummary.today_sales / 50000) * 80)) : 0, color: "indigo" as const },
+                    { name: "فرع المدينة", value: branchSummary ? Math.min(100, Math.round((branchSummary.today_sales / 50000) * 70)) : 0, color: "amber" as const },
                   ].map((branch) => (
                     <GlassProgress
                       key={branch.name}

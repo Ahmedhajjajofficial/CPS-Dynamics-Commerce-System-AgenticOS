@@ -30,6 +30,7 @@ Architecture:
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import uuid
 from dataclasses import dataclass, field
@@ -44,6 +45,8 @@ from .event_store import (
     EventMetadata, EventStoreSubscription
 )
 from .security import CryptoManager, SovereignPayload, EncryptedPayload
+from .proto import cps_enterprise_v4_pb2 as pb2
+from .proto import cps_enterprise_v4_pb2_grpc as pb2_grpc
 
 
 # Configure logging
@@ -445,9 +448,11 @@ class LocalAgent:
         consecutive_failures = 0
         while self._running:
             try:
+                self.sync_status.pending_events = await self._get_pending_events_count()
                 await self._sync_with_regional()
                 self.sync_status.is_connected = True
                 self.sync_status.failed_events = 0
+                self.sync_status.pending_events = 0
                 consecutive_failures = 0
                 if self.state == AgentState.DEGRADED:
                     self.state = AgentState.ACTIVE
@@ -470,12 +475,141 @@ class LocalAgent:
             
             await asyncio.sleep(self.config.sync_interval_seconds)
     
+    async def _get_pending_events_count(self) -> int:
+        """Count events pending synchronization."""
+        try:
+            events = await self.event_store.read_all(limit=100000)
+            return len(events)
+        except Exception as exc:
+            logger.error("Failed to count pending events: %s", exc)
+            return 0
+    
+    async def _get_pending_events(self, limit: int = 100) -> List[StoredEvent]:
+        """Get events pending synchronization."""
+        try:
+            return await self.event_store.read_all(limit=limit)
+        except Exception as exc:
+            logger.error("Failed to read pending events: %s", exc)
+            return []
+    
+    def _event_to_proto(self, event: StoredEvent) -> pb2.SovereignFinancialEvent:
+        """Convert a StoredEvent to a SovereignFinancialEvent protobuf."""
+        try:
+            proto_event = pb2.SovereignFinancialEvent(
+                event_id=event.event_id,
+                stream_version=event.version,
+                type=pb2.EventType.Value(event.event_type) if event.event_type in pb2.EventType.keys() else pb2.UNKNOWN
+            )
+            
+            if event.created_at:
+                proto_event.ts.FromDatetime(event.created_at)
+            
+            # Reconstruct SovereignPayload from stored serialized bytes
+            if event.payload:
+                try:
+                    payload_dict = json.loads(event.payload.decode())
+                    proto_payload = pb2.SovereignPayload()
+                    for field_name in (
+                        "encrypted_data", "encrypted_dek", "dek_auth_tag",
+                        "iv", "auth_tag", "encrypted_inner_layer",
+                        "compliance_proof", "audit_trail_hash"
+                    ):
+                        if field_name in payload_dict and payload_dict[field_name] is not None:
+                            setattr(proto_payload, field_name, base64.b64decode(payload_dict[field_name]))
+                    proto_payload.kms_key_id = payload_dict.get("kms_key_id", "")
+                    proto_payload.hmac_signature = payload_dict.get("hmac_signature", "")
+                    proto_payload.schema_version = payload_dict.get("schema_version", 1)
+                    proto_payload.inner_key_derivation = payload_dict.get("inner_key_derivation", "")
+                    proto_event.payload.CopyFrom(proto_payload)
+                except Exception as exc:
+                    logger.warning("Failed to parse payload for event %s: %s", event.event_id, exc)
+            
+            return proto_event
+        except Exception as exc:
+            logger.error("Failed to convert event %s to proto: %s", event.event_id, exc)
+            return pb2.SovereignFinancialEvent(
+                event_id=event.event_id or "unknown",
+                type=pb2.UNKNOWN
+            )
+    
     async def _sync_with_regional(self):
-        """Synchronize events with regional agent."""
-        # TODO: Implement gRPC sync with regional agent
-        # For now, just update status
-        self.sync_status.last_sync_at = datetime.utcnow()
-        logger.debug("Sync with regional agent completed")
+        """Synchronize events and CRDT state with the regional agent."""
+        if not self.config.regional_agent_endpoint:
+            logger.debug("No regional agent endpoint configured; skipping sync")
+            return
+        
+        import grpc
+        
+        channel = None
+        try:
+            channel = grpc.insecure_channel(self.config.regional_agent_endpoint)
+            stub = pb2_grpc.AccountingSwarmProtocolStub(channel)
+            
+            # 1. Stream pending offline events
+            pending_events = await self._get_pending_events(limit=self.config.batch_size)
+            if pending_events:
+                def event_generator():
+                    for ev in pending_events:
+                        yield self._event_to_proto(ev)
+                
+                try:
+                    batch_ack = stub.StreamOfflineEvents(event_generator())
+                    self.sync_status.synced_events += batch_ack.total_processed
+                    self.sync_status.failed_events += batch_ack.total_failed
+                    logger.info(
+                        "Streamed %d events to regional agent (failed: %d)",
+                        batch_ack.total_processed,
+                        batch_ack.total_failed,
+                    )
+                except grpc.RpcError as exc:
+                    logger.error("StreamOfflineEvents RPC failed: %s", exc)
+                    raise
+            
+            # 2. Sync CRDT state
+            crdt_states = self.crdt_manager.get_all_states()
+            if crdt_states:
+                def crdt_generator():
+                    for crdt_id, state in crdt_states.items():
+                        bundle = pb2.CRDTStateBundle(
+                            branch_id=self.config.branch_id,
+                            crdt_type=state.get("type", "UNKNOWN"),
+                            crdt_id=crdt_id,
+                            serialized_state=json.dumps(state).encode(),
+                            last_updated=pb2.HybridLogicalClock(
+                                physical_ms=int(datetime.utcnow().timestamp() * 1000),
+                                logical=1,
+                                node_id=self.config.agent_id,
+                                counter=1,
+                            ),
+                            version=state.get("version", 1),
+                        )
+                        yield bundle
+                
+                try:
+                    crdt_ack = stub.StreamCRDTUpdates(crdt_generator())
+                    logger.info(
+                        "Synced %d CRDT state bundles to regional agent",
+                        crdt_ack.total_processed,
+                    )
+                except grpc.RpcError as exc:
+                    logger.error("StreamCRDTUpdates RPC failed: %s", exc)
+                    raise
+            
+            self.sync_status.last_sync_at = datetime.utcnow()
+            self.sync_status.is_connected = True
+            logger.debug("Sync with regional agent completed")
+            
+        except grpc.RpcError as exc:
+            self.sync_status.is_connected = False
+            logger.error("gRPC sync error: %s", exc)
+            raise
+        except Exception as exc:
+            self.sync_status.is_connected = False
+            logger.error("Sync error: %s", exc)
+            raise
+        finally:
+            if channel is not None:
+                channel.close()
     
     async def _load_crdt_state(self):
         """Load CRDT state from persistence."""

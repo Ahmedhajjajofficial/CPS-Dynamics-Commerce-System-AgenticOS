@@ -294,6 +294,11 @@ func (a *RegionalAgent) GetState() State {
 	return a.state
 }
 
+// Raft returns the underlying Raft instance (nil if not initialized).
+func (a *RegionalAgent) Raft() *raft.Raft {
+	return a.raft
+}
+
 func (a *RegionalAgent) setState(state State) {
 	a.stateMu.Lock()
 	defer a.stateMu.Unlock()

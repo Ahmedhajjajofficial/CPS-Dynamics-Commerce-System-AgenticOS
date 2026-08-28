@@ -1,0 +1,106 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: regional-agent
+  namespace: dcs
+spec:
+  type: ClusterIP
+  ports:
+    - port: 50052
+      targetPort: 50052
+      name: grpc
+    - port: 8080
+      targetPort: 8080
+      name: health
+    - port: 12000
+      targetPort: 12000
+      name: rpc
+    - port: 12001
+      targetPort: 12001
+      name: raft
+  selector:
+    app: regional-agent
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: regional-agent
+  namespace: dcs
+spec:
+  serviceName: "regional-agent"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: regional-agent
+  template:
+    metadata:
+      labels:
+        app: regional-agent
+    spec:
+      containers:
+        - name: regional-agent
+          image: regional-agent:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DCS_AGENT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: dcs-config
+                  key: REGIONAL_AGENT_ID
+            - name: DCS_REGION_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: dcs-config
+                  key: REGION_ID
+            - name: DCS_GRPC_PORT
+              value: "50052"
+            - name: DCS_HEALTH_ADDR
+              value: ":8080"
+            - name: DCS_POSTGRESQL_URL
+              value: "postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)?sslmode=require"
+            - name: DCS_REDIS_URL
+              value: "redis:6379"
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: dcs-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dcs-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: dcs-config
+                  key: POSTGRES_DB
+          ports:
+            - containerPort: 50052
+              name: grpc
+            - containerPort: 8080
+              name: health
+            - containerPort: 12000
+              name: rpc
+            - containerPort: 12001
+              name: raft
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: regional-data
+              mountPath: /data
+      volumes:
+        - name: regional-data
+          emptyDir: {}

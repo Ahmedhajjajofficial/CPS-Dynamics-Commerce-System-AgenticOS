@@ -1,0 +1,79 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: local-agent
+  namespace: dcs
+spec:
+  type: ClusterIP
+  ports:
+    - port: 50051
+      targetPort: 50051
+      name: grpc
+    - port: 8080
+      targetPort: 8080
+      name: health
+  selector:
+    app: local-agent
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: local-agent
+  namespace: dcs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: local-agent
+  template:
+    metadata:
+      labels:
+        app: local-agent
+    spec:
+      containers:
+        - name: local-agent
+          image: local-agent:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DCS_AGENT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: dcs-config
+                  key: LOCAL_AGENT_ID
+            - name: DCS_BRANCH_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: dcs-config
+                  key: BRANCH_ID
+            - name: DCS_REGION_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: dcs-config
+                  key: REGION_ID
+            - name: DCS_REGIONAL_ENDPOINT
+              value: "regional-agent:50052"
+          ports:
+            - containerPort: 50051
+              name: grpc
+            - containerPort: 8080
+              name: health
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: local-data
+              mountPath: /data
+      volumes:
+        - name: local-data
+          emptyDir: {}

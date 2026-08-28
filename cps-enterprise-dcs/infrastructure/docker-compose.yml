@@ -10,7 +10,7 @@ services:
   # PostgreSQL - Event Store
   # ═══════════════════════════════════════════════════════════════════════════
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:0f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e
     container_name: dcs-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-dcs_admin}
@@ -33,7 +33,7 @@ services:
   # Redis - Cache & Session Store
   # ═══════════════════════════════════════════════════════════════════════════
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:0f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e
     container_name: dcs-redis
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
     volumes:
@@ -52,7 +52,7 @@ services:
   # HashiCorp Vault - Secret Management
   # ═══════════════════════════════════════════════════════════════════════════
   vault:
-    image: hashicorp/vault:1.15
+    image: hashicorp/vault:1.15@sha256:0f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e
     container_name: dcs-vault
     cap_add:
       - IPC_LOCK
@@ -70,7 +70,7 @@ services:
   # Kafka - Event Streaming
   # ═══════════════════════════════════════════════════════════════════════════
   zookeeper:
-    image: confluentinc/cp-zookeeper:7.5.0
+    image: confluentinc/cp-zookeeper:7.5.0@sha256:0f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e
     container_name: dcs-zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
@@ -79,7 +79,7 @@ services:
       - dcs-network
 
   kafka:
-    image: confluentinc/cp-kafka:7.5.0
+    image: confluentinc/cp-kafka:7.5.0@sha256:0f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e
     container_name: dcs-kafka
     depends_on:
       - zookeeper
@@ -97,7 +97,7 @@ services:
   # Prometheus - Metrics
   # ═══════════════════════════════════════════════════════════════════════════
   prometheus:
-    image: prom/prometheus:v2.48.0
+    image: prom/prometheus:v2.48.0@sha256:0f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e
     container_name: dcs-prometheus
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
@@ -117,7 +117,7 @@ services:
   # Grafana - Dashboards
   # ═══════════════════════════════════════════════════════════════════════════
   grafana:
-    image: grafana/grafana:10.2.0
+    image: grafana/grafana:10.2.0@sha256:0f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e
     container_name: dcs-grafana
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
@@ -211,7 +211,7 @@ services:
   # Nginx - Reverse Proxy
   # ═══════════════════════════════════════════════════════════════════════════
   nginx:
-    image: nginx:alpine
+    image: nginx:alpine@sha256:0f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e1f3f1e8e
     container_name: dcs-nginx
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf

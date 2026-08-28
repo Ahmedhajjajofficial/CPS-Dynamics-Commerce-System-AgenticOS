@@ -101,6 +101,8 @@ func main() {
 		logger.Fatal("Failed to create agent", zap.Error(err))
 	}
 
+	ctx := context.Background()
+
 	// Initialize PostgreSQL store for handlers
 	var pgStore *store.Store
 	if cfg.PostgreSQLURL != "" {

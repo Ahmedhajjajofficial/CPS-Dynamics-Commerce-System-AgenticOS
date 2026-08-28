@@ -19,6 +19,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ../event-store/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ../event-store/master-schema.sql:/docker-entrypoint-initdb.d/02-master-schema.sql
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
@@ -148,6 +149,13 @@ services:
       DCS_POSTGRESQL_URL: postgres://${POSTGRES_USER:-dcs_admin}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-dcs_eventstore}?sslmode=require
       DCS_REDIS_URL: redis:6379
       DCS_BOOTSTRAP: "true"
+      DCS_ENV: production
+      DCS_TLS_CERT_FILE: /etc/tls/certs/regional-agent.crt
+      DCS_TLS_KEY_FILE: /etc/tls/certs/regional-agent.key
+      DCS_TLS_CA_FILE: /etc/tls/ca/ca.crt
+    volumes:
+      - ../infrastructure/tls/certs:/etc/tls/certs:ro
+      - ../infrastructure/tls/ca:/etc/tls/ca:ro
     ports:
       - "12000:12000"
       - "12001:12001"
@@ -157,6 +165,41 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - dcs-network
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Master Agent (Go) - Global Orchestrator
+  # ═══════════════════════════════════════════════════════════════════════════
+  master-agent:
+    build:
+      context: ../master-agent
+      dockerfile: Dockerfile
+    container_name: dcs-master-agent
+    environment:
+      DCS_AGENT_ID: ${MASTER_AGENT_ID:-master-001}
+      DCS_REGION_ID: global
+      DCS_GRPC_PORT: 50053
+      DCS_POSTGRESQL_URL: postgres://${POSTGRES_USER:-dcs_admin}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-dcs_eventstore}?sslmode=require
+      DCS_KAFKA_BROKERS: kafka:9092
+      DCS_ENV: production
+      DCS_TLS_CERT_FILE: /etc/tls/certs/master-agent.crt
+      DCS_TLS_KEY_FILE: /etc/tls/certs/master-agent.key
+      DCS_TLS_CA_FILE: /etc/tls/ca/ca.crt
+    volumes:
+      - ../infrastructure/tls/certs:/etc/tls/certs:ro
+      - ../infrastructure/tls/ca:/etc/tls/ca:ro
+    ports:
+      - "50053:50053"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
     networks:
       - dcs-network
     deploy:

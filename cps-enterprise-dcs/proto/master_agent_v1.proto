@@ -1,0 +1,341 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// CP'S Enterprise DCS v4.0 - Master Agent Protocol
+// Global Orchestration & Cross-Region Coordination
+// ═══════════════════════════════════════════════════════════════════════════════
+// Author: Ahmed Hajjaj - Full-Spectrum Architect
+// License: Proprietary - Internal Use Only
+// ═══════════════════════════════════════════════════════════════════════════════
+
+syntax = "proto3";
+
+package cps.master.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+import "cps/enterprise/v4.proto";
+
+option go_package = "github.com/cps-enterprise/dcs/master-agent/internal/proto";
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION 1: GLOBAL RECONCILIATION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+service GlobalReconciliationService {
+  rpc TriggerReconciliation(ReconciliationJob) returns (ReconciliationResult);
+  rpc GetReconciliationStatus(ReconciliationStatusRequest) returns (ReconciliationJob);
+  rpc ListReconciliationHistory(ReconciliationHistoryRequest) returns (ReconciliationHistoryResponse);
+  rpc ValidateBranchState(BranchValidationRequest) returns (BranchValidationResponse);
+}
+
+message ReconciliationJob {
+  string job_id = 1;
+  string region_id = 2;
+  repeated string branch_ids = 3;
+  int64 start_timestamp = 4;
+  int64 end_timestamp = 5;
+  ReconciliationType type = 6;
+  ReconciliationStatus status = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp completed_at = 9;
+  string requested_by = 10;
+  bytes result_summary = 11;
+}
+
+enum ReconciliationType {
+  RECONCILIATION_DAILY = 0;
+  RECONCILIATION_WEEKLY = 1;
+  RECONCILIATION_MONTHLY = 2;
+  RECONCILIATION_ADHOC = 3;
+  RECONCILIATION_CROSS_REGION = 4;
+}
+
+enum ReconciliationStatus {
+  RECONCILIATION_PENDING = 0;
+  RECONCILIATION_IN_PROGRESS = 1;
+  RECONCILIATION_COMPLETED = 2;
+  RECONCILIATION_FAILED = 3;
+  RECONCILIATION_DISPUTED = 4;
+}
+
+message ReconciliationResult {
+  string job_id = 1;
+  bool is_balanced = 2;
+  double total_expected = 3;
+  double total_actual = 4;
+  double discrepancy = 5;
+  repeated BranchDiscrepancy branch_discrepancies = 6;
+  string validation_signature = 7;
+  google.protobuf.Timestamp completed_at = 8;
+}
+
+message BranchDiscrepancy {
+  string branch_id = 1;
+  double expected_balance = 2;
+  double actual_balance = 3;
+  double discrepancy = 4;
+  repeated string missing_event_ids = 5;
+  repeated string duplicate_event_ids = 6;
+  string resolution = 7;
+}
+
+message ReconciliationStatusRequest {
+  string job_id = 1;
+}
+
+message ReconciliationHistoryRequest {
+  string region_id = 1;
+  int64 start_date = 2;
+  int64 end_date = 3;
+  int32 limit = 4;
+  string cursor = 5;
+}
+
+message ReconciliationHistoryResponse {
+  repeated ReconciliationJob jobs = 1;
+  string next_cursor = 2;
+  bool has_more = 3;
+}
+
+message BranchValidationRequest {
+  string branch_id = 1;
+  string region_id = 2;
+}
+
+message BranchValidationResponse {
+  bool is_valid = 1;
+  int64 last_known_event_version = 2;
+  int64 current_event_version = 3;
+  bool has_gaps = 4;
+  repeated int64 missing_versions = 5;
+  string validation_summary = 6;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION 2: DECISION ENGINE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+service DecisionEngineService {
+  rpc SubmitDecision(DecisionRequest) returns (DecisionResponse);
+  rpc GetDecision(DecisionRequest) returns (AgentDecision);
+  rpc ListDecisions(DecisionHistoryRequest) returns (DecisionHistoryResponse);
+  rpc EvaluateForecast(ForecastEvaluationRequest) returns (ForecastEvaluationResponse);
+}
+
+message DecisionRequest {
+  string decision_id = 1;
+  string agent_id = 2;
+  string branch_id = 3;
+  DecisionType type = 4;
+  bytes context = 5;
+  float confidence_threshold = 6;
+}
+
+message DecisionResponse {
+  string decision_id = 1;
+  bool approved = 2;
+  string decision = 3;
+  string reasoning = 4;
+  float confidence_score = 5;
+  google.protobuf.Timestamp decided_at = 6;
+  string decided_by = 7;
+}
+
+message DecisionHistoryRequest {
+  string agent_id = 1;
+  string branch_id = 2;
+  int64 start_date = 3;
+  int64 end_date = 4;
+  int32 limit = 5;
+}
+
+message DecisionHistoryResponse {
+  repeated AgentDecision decisions = 1;
+  string next_cursor = 2;
+  bool has_more = 3;
+}
+
+message ForecastEvaluationRequest {
+  string branch_id = 1;
+  string model_version = 2;
+  int64 evaluation_start = 3;
+  int64 evaluation_end = 4;
+}
+
+message ForecastEvaluationResponse {
+  string evaluation_id = 1;
+  float mae = 2;                      // Mean Absolute Error
+  float rmse = 3;                     // Root Mean Squared Error
+  float mape = 4;                     // Mean Absolute Percentage Error
+  int32 sample_count = 5;
+  string model_version = 6;
+  google.protobuf.Timestamp evaluated_at = 7;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION 3: MASTER COORDINATION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+service MasterCoordinationService {
+  rpc RegisterRegionalAgent(RegionalAgentRegistration) returns (RegistrationResponse);
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  rpc GetGlobalState(GlobalStateRequest) returns (GlobalStateResponse);
+  rpc PropagateDecision(MasterDecision) returns (PropagationResult);
+}
+
+message RegionalAgentRegistration {
+  string agent_id = 1;
+  string region_id = 2;
+  string rpc_address = 3;
+  string raft_address = 4;
+  repeated string capabilities = 5;
+  bytes public_key = 6;
+}
+
+message RegistrationResponse {
+  bool success = 1;
+  string master_agent_id = 2;
+  google.protobuf.Timestamp registered_at = 3;
+  string session_token = 4;
+}
+
+message HeartbeatRequest {
+  string agent_id = 1;
+  string region_id = 2;
+  AgentStatus status = 3;
+  int64 active_branches = 4;
+  int64 pending_events = 5;
+  google.protobuf.Timestamp timestamp = 6;
+}
+
+message HeartbeatResponse {
+  bool acknowledged = 1;
+  string master_instruction = 2;
+  repeated string pending_tasks = 3;
+  google.protobuf.Timestamp next_heartbeat_deadline = 4;
+}
+
+message GlobalStateRequest {
+  string region_id = 1;
+  bool include_branches = 2;
+  bool include_events = 3;
+}
+
+message GlobalStateResponse {
+  string master_agent_id = 4;
+  int64 total_regions = 5;
+  int64 total_branches = 6;
+  int64 total_events = 7;
+  repeated RegionalAgentInfo regions = 8;
+  google.protobuf.Timestamp snapshot_time = 9;
+}
+
+message RegionalAgentInfo {
+  string agent_id = 1;
+  string region_id = 2;
+  AgentStatus status = 3;
+  int64 branch_count = 4;
+  int64 event_count = 5;
+  google.protobuf.Timestamp last_heartbeat = 6;
+}
+
+message MasterDecision {
+  string decision_id = 1;
+  DecisionType type = 2;
+  string target_region_id = 3;
+  string target_branch_id = 4;
+  bytes decision_payload = 5;
+  string reasoning = 6;
+  int64 ttl_seconds = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message PropagationResult {
+  string decision_id = 1;
+  bool acknowledged = 2;
+  string agent_id = 3;
+  string error_message = 4;
+  google.protobuf.Timestamp acknowledged_at = 5;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION 4: EVENT STREAMING (Kafka Integration)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+service EventStreamingService {
+  rpc PublishRegionalEvent(RegionalEventPublication) returns (PublicationResult);
+  rpc SubscribeToMasterEvents(SubscriptionRequest) returns (stream MasterEvent);
+  rpc GetEventStats(EventStatsRequest) returns (EventStatsResponse);
+}
+
+message RegionalEventPublication {
+  string region_id = 1;
+  string branch_id = 2;
+  string event_id = 3;
+  string event_type = 4;
+  bytes event_payload = 5;
+  google.protobuf.Timestamp occurred_at = 6;
+  google.protobuf.Timestamp received_at = 7;
+  string kafka_topic = 8;
+  int32 kafka_partition = 9;
+  int64 kafka_offset = 10;
+}
+
+message PublicationResult {
+  bool success = 1;
+  string topic = 2;
+  int32 partition = 3;
+  int64 offset = 4;
+  string error_message = 5;
+}
+
+message SubscriptionRequest {
+  string subscriber_id = 1;
+  repeated string event_types = 2;
+  string region_filter = 3;
+  bool include_historical = 4;
+}
+
+message MasterEvent {
+  string event_id = 1;
+  string source_region_id = 2;
+  string source_branch_id = 3;
+  string event_type = 4;
+  bytes event_payload = 5;
+  google.protobuf.Timestamp occurred_at = 6;
+  string topic = 7;
+  int32 partition = 8;
+  int64 offset = 9;
+}
+
+message EventStatsRequest {
+  string region_id = 1;
+  int64 start_time = 2;
+  int64 end_time = 3;
+}
+
+message EventStatsResponse {
+  int64 total_events = 1;
+  map<string, int64> events_by_type = 2;
+  map<string, int64> events_by_branch = 3;
+  float events_per_second = 4;
+  google.protobuf.Timestamp generated_at = 5;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION 5: SECURITY & AUTH
+// ═══════════════════════════════════════════════════════════════════════════════
+
+message AgentCertificate {
+  string agent_id = 1;
+  string certificate_pem = 2;
+  string private_key_pem = 3;
+  string ca_certificate_pem = 4;
+  google.protobuf.Timestamp expires_at = 5;
+}
+
+message mTLSHandshake {
+  string agent_id = 1;
+  string certificate_fingerprint = 2;
+  bytes signature = 3;
+  google.protobuf.Timestamp timestamp = 4;
+}

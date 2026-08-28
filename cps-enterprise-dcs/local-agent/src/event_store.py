@@ -168,6 +168,11 @@ class SQLiteEventStore(EventStore):
     """
     SQLite-based event store for local agent.
     Optimized for edge deployment with minimal resources.
+    
+    NOTE: This implementation uses threading.RLock() for concurrency control.
+    In an asyncio-based application, this can cause contention because the lock
+    is shared across threads while the event loop runs in a single thread.
+    For high-concurrency async workloads, consider migrating to aiosqlite.
     """
     
     def __init__(self, db_path: str = "events.db"):

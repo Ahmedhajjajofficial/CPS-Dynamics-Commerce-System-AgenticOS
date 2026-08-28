@@ -49,6 +49,48 @@ from .proto import cps_enterprise_v4_pb2 as pb2
 from .proto import cps_enterprise_v4_pb2_grpc as pb2_grpc
 
 
+class CircuitBreaker:
+    """Simple circuit breaker for external calls."""
+    
+    def __init__(self, failure_threshold: int = 5, recovery_timeout: float = 30.0):
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.failure_count = 0
+        self.last_failure_time: Optional[datetime] = None
+        self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
+    
+    def record_success(self):
+        self.failure_count = 0
+        self.state = "CLOSED"
+    
+    def record_failure(self):
+        self.failure_count += 1
+        self.last_failure_time = datetime.utcnow()
+        if self.failure_count >= self.failure_threshold:
+            self.state = "OPEN"
+            logger.warning(
+                "Circuit breaker opened after %d failures",
+                self.failure_count,
+            )
+    
+    def allow_request(self) -> bool:
+        if self.state == "CLOSED":
+            return True
+        
+        if self.state == "OPEN":
+            if self.last_failure_time and (
+                datetime.utcnow() - self.last_failure_time
+            ).total_seconds() >= self.recovery_timeout:
+                self.state = "HALF_OPEN"
+                return True
+            return False
+        
+        if self.state == "HALF_OPEN":
+            return True
+        
+        return False
+
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("LocalAgent")
@@ -117,6 +159,10 @@ class LocalAgent:
         self.sync_status = SyncStatus()
         self._sync_task: Optional[asyncio.Task] = None
         self._running = False
+        self._sync_circuit_breaker = CircuitBreaker(
+            failure_threshold=5,
+            recovery_timeout=30.0,
+        )
         
         # Event handlers
         self._event_handlers: Dict[str, List[Callable[[StoredEvent], None]]] = {}
@@ -448,11 +494,17 @@ class LocalAgent:
         consecutive_failures = 0
         while self._running:
             try:
+                if not self._sync_circuit_breaker.allow_request():
+                    logger.warning("Sync circuit breaker is open; skipping sync")
+                    await asyncio.sleep(self.config.sync_interval_seconds)
+                    continue
+                
                 self.sync_status.pending_events = await self._get_pending_events_count()
                 await self._sync_with_regional()
                 self.sync_status.is_connected = True
                 self.sync_status.failed_events = 0
                 self.sync_status.pending_events = 0
+                self._sync_circuit_breaker.record_success()
                 consecutive_failures = 0
                 if self.state == AgentState.DEGRADED:
                     self.state = AgentState.ACTIVE
@@ -461,6 +513,7 @@ class LocalAgent:
                 consecutive_failures += 1
                 self.sync_status.is_connected = False
                 self.sync_status.failed_events += 1
+                self._sync_circuit_breaker.record_failure()
                 logger.error(
                     "Sync failed (attempt %d): %s",
                     consecutive_failures, e,
@@ -696,3 +749,139 @@ class LocalAgent:
         self._active_sagas[saga_id]["state"] = "COMPLETED"
         self._active_sagas[saga_id]["completed_at"] = datetime.utcnow().isoformat()
         logger.info(f"Saga completed: {saga_id}")
+    
+    async def fail_saga(self, saga_id: str, reason: str):
+        """Mark a saga as failed and trigger compensation."""
+        if saga_id not in self._active_sagas:
+            raise ValueError(f"Unknown saga: {saga_id}")
+        
+        saga = self._active_sagas[saga_id]
+        saga["state"] = "FAILED"
+        saga["failed_at"] = datetime.utcnow().isoformat()
+        saga["failure_reason"] = reason
+        
+        logger.warning(f"Saga failed: {saga_id}, reason: {reason}")
+        
+        # Trigger compensation in background
+        asyncio.create_task(self._compensate_saga(saga_id))
+    
+    async def timeout_saga(self, saga_id: str):
+        """Mark a saga as timed out and trigger compensation."""
+        if saga_id not in self._active_sagas:
+            raise ValueError(f"Unknown saga: {saga_id}")
+        
+        saga = self._active_sagas[saga_id]
+        saga["state"] = "TIMED_OUT"
+        saga["timed_out_at"] = datetime.utcnow().isoformat()
+        
+        logger.warning(f"Saga timed out: {saga_id}")
+        
+        # Trigger compensation in background
+        asyncio.create_task(self._compensate_saga(saga_id))
+    
+    async def _compensate_saga(self, saga_id: str):
+        """Execute compensation steps for a failed/timed-out saga."""
+        saga = self._active_sagas.get(saga_id)
+        if not saga:
+            return
+        
+        saga["state"] = "COMPENSATING"
+        logger.info(f"Starting compensation for saga: {saga_id}")
+        
+        # Execute compensation steps in reverse order
+        for step in reversed(saga.get("steps", [])):
+            try:
+                await self._execute_compensation_step(saga_id, step)
+            except Exception as exc:
+                logger.error(
+                    "Compensation step '%s' failed for saga %s: %s",
+                    step.get("step_name"),
+                    saga_id,
+                    exc,
+                    exc_info=True,
+                )
+        
+        saga["state"] = "COMPENSATED"
+        saga["compensated_at"] = datetime.utcnow().isoformat()
+        logger.info(f"Saga compensation completed: {saga_id}")
+    
+    async def _execute_compensation_step(self, saga_id: str, step: Dict[str, Any]):
+        """Execute a single compensation step."""
+        step_name = step.get("step_name", "unknown")
+        result = step.get("result", {})
+        
+        logger.info(f"Compensating step '{step_name}' for saga {saga_id}")
+        
+        # Compensation logic based on step type
+        if step_name == "record_sale":
+            await self._compensate_sale(saga_id, result)
+        elif step_name == "record_inventory_receipt":
+            await self._compensate_inventory_receipt(saga_id, result)
+        elif step_name == "start_sales_session":
+            await self._compensate_session(saga_id, result)
+        else:
+            logger.warning(f"Unknown compensation step: {step_name}")
+    
+    async def _compensate_sale(self, saga_id: str, result: Dict[str, Any]):
+        """Compensate a sale by recording a reversal."""
+        await self._record_event(
+            stream_id=result.get("stream_id", ""),
+            event_type="SALE_REVERSED",
+            event_data={
+                "original_saga_id": saga_id,
+                "product_id": result.get("product_id"),
+                "quantity": result.get("quantity"),
+                "total_amount": result.get("total_amount"),
+                "reason": "saga_compensation",
+            },
+            correlation_id=saga_id,
+            tenant_id=self.config.branch_id,
+        )
+        logger.info(f"Sale compensation recorded for saga {saga_id}")
+    
+    async def _compensate_inventory_receipt(self, saga_id: str, result: Dict[str, Any]):
+        """Compensate an inventory receipt by reversing it."""
+        product_id = result.get("product_id")
+        quantity = result.get("quantity", 0)
+        
+        await self._update_inventory_counter(product_id, -quantity)
+        
+        await self._record_event(
+            stream_id=result.get("stream_id", ""),
+            event_type="INVENTORY_ADJUSTMENT",
+            event_data={
+                "original_saga_id": saga_id,
+                "product_id": product_id,
+                "quantity": -quantity,
+                "reason": "saga_compensation",
+            },
+            correlation_id=saga_id,
+            tenant_id=self.config.branch_id,
+        )
+        logger.info(f"Inventory compensation recorded for saga {saga_id}")
+    
+    async def _compensate_session(self, saga_id: str, result: Dict[str, Any]):
+        """Compensate a sales session by closing it."""
+        session_id = result.get("session_id")
+        if session_id:
+            await self.close_sales_session(
+                session_id=session_id,
+                closing_balance=0.0,
+                total_sales=0.0,
+                transaction_count=0,
+            )
+            logger.info(f"Session compensation recorded for saga {saga_id}")
+    
+    async def persist_saga_state(self, saga_id: str):
+        """Persist saga state to event store for durability."""
+        saga = self._active_sagas.get(saga_id)
+        if not saga:
+            return
+        
+        await self._record_event(
+            stream_id=f"saga:{saga_id}",
+            event_type="SAGA_STATE_PERSISTED",
+            event_data=saga,
+            correlation_id=saga_id,
+            tenant_id=self.config.branch_id,
+        )

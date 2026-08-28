@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cps-enterprise/dcs/regional-agent/internal/config"
@@ -92,4 +93,13 @@ func (s *Store) InsertAuditLog(ctx context.Context, action, actorID, resourceTyp
 	if err != nil {
 		s.logger.Error("failed to insert audit log", zap.Error(err))
 	}
+}
+
+// Query executes a query and returns rows for scanning.
+// The caller must close the returned rows.
+func (s *Store) Query(ctx context.Context, query string, args ...interface{}) (pgxpool.Rows, error) {
+	if s == nil || s.pool == nil {
+		return nil, fmt.Errorf("store not configured")
+	}
+	return s.pool.Query(ctx, query, args...)
 }

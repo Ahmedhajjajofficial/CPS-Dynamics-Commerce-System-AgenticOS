@@ -208,6 +208,34 @@ jobs:
           cd cps-enterprise-dcs/master-agent
           go build -o bin/master-agent ./...
 
+  projection-workers:
+    name: Build & Test Projection Workers
+    runs-on: ubuntu-latest
+    needs: security-audit
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Download Deps
+        run: |
+          cd cps-enterprise-dcs/projection-workers
+          go mod download
+
+      - name: Lint
+        run: |
+          cd cps-enterprise-dcs/projection-workers
+          go vet ./...
+
+      - name: Build
+        run: |
+          cd cps-enterprise-dcs/projection-workers
+          go build -o bin/projection-workers ./...
+
   integration:
     name: Integration Tests
     runs-on: ubuntu-latest

@@ -50,6 +50,37 @@ services:
       - dcs-network
 
   # ═══════════════════════════════════════════════════════════════════════════
+  # PgBouncer - PostgreSQL Connection Pooler
+  # ═══════════════════════════════════════════════════════════════════════════
+  pgbouncer:
+    image: pgbouncer/pgbouncer:latest
+    container_name: dcs-pgbouncer
+    environment:
+      DATABASES_USER: ${POSTGRES_USER:-dcs_admin}
+      DATABASES_DBNAME: ${POSTGRES_DB:-dcs_eventstore}
+      DATABASES_HOST: postgres
+      DATABASES_PORT: "5432"
+      PGBOUNCER_POOL_MODE: transaction
+      PGBOUNCER_MAX_CLIENT_CONN: "1000"
+      PGBOUNCER_DEFAULT_POOL_SIZE: "25"
+      PGBOUNCER_MIN_POOL_SIZE: "5"
+      PGBOUNCER_RESERVE_POOL_SIZE: "5"
+      PGBOUNCER_MAX_DB_CONNECTIONS: "50"
+      PGBOUNCER_MAX_USER_CONNECTIONS: "50"
+      PGBOUNCER_LOG_CONNECTIONS: "1"
+      PGBOUNCER_LOG_DISCONNECTIONS: "1"
+      PGBOUNCER_LOG_POOLER_ERRORS: "1"
+      PGBOUNCER_STATS_PERIOD: "60"
+      PGBOUNCER_ADMIN_USERS: postgres
+    ports:
+      - "6432:6432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - dcs-network
+
+  # ═══════════════════════════════════════════════════════════════════════════
   # HashiCorp Vault - Secret Management
   # ═══════════════════════════════════════════════════════════════════════════
   vault:
@@ -153,6 +184,7 @@ services:
       DCS_TLS_CERT_FILE: /etc/tls/certs/regional-agent.crt
       DCS_TLS_KEY_FILE: /etc/tls/certs/regional-agent.key
       DCS_TLS_CA_FILE: /etc/tls/ca/ca.crt
+      DCS_POSTGRESQL_URL: postgres://${POSTGRES_USER:-dcs_admin}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@pgbouncer:6432/${POSTGRES_DB:-dcs_eventstore}?sslmode=require
     volumes:
       - ../infrastructure/tls/certs:/etc/tls/certs:ro
       - ../infrastructure/tls/ca:/etc/tls/ca:ro
@@ -184,7 +216,7 @@ services:
       DCS_AGENT_ID: ${MASTER_AGENT_ID:-master-001}
       DCS_REGION_ID: global
       DCS_GRPC_PORT: 50053
-      DCS_POSTGRESQL_URL: postgres://${POSTGRES_USER:-dcs_admin}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-dcs_eventstore}?sslmode=require
+      DCS_POSTGRESQL_URL: postgres://${POSTGRES_USER:-dcs_admin}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@pgbouncer:6432/${POSTGRES_DB:-dcs_eventstore}?sslmode=require
       DCS_KAFKA_BROKERS: kafka:9092
       DCS_ENV: production
       DCS_TLS_CERT_FILE: /etc/tls/certs/master-agent.crt
@@ -266,6 +298,77 @@ services:
       - regional-agent
     networks:
       - dcs-network
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Jaeger - Distributed Tracing
+  # ═══════════════════════════════════════════════════════════════════════════
+  jaeger:
+    image: jaegertracing/all-in-one:1.52
+    container_name: dcs-jaeger
+    ports:
+      - "${JAEGER_UI_PORT:-16686}:16686"
+      - "4317:4317"
+      - "4318:4318"
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+      MEMORY_MAX_TRACES: 100000
+    networks:
+      - dcs-network
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Projection Workers
+  # ═══════════════════════════════════════════════════════════════════════════
+  projection-workers:
+    build:
+      context: ../projection-workers
+      dockerfile: Dockerfile
+    container_name: dcs-projection-workers
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-dcs_admin}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@pgbouncer:6432/${POSTGRES_DB:-dcs_eventstore}?sslmode=require
+      KAFKA_BROKERS: kafka:9092
+      DCS_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      pgbouncer:
+        condition: service_started
+    networks:
+      - dcs-network
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: on-failure
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # ML Platform - Anomaly Detection
+  # ═══════════════════════════════════════════════════════════════════════════
+  ml-anomaly-detector:
+    build:
+      context: ../ml-platform/anomaly-detection
+      dockerfile: Dockerfile
+    container_name: dcs-ml-anomaly-detector
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-dcs_admin}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@pgbouncer:6432/${POSTGRES_DB:-dcs_eventstore}?sslmode=require
+      KAFKA_BROKERS: kafka:9092
+      REDIS_URL: redis:6379
+      DCS_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - dcs-network
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
 
 # ═══════════════════════════════════════════════════════════════════════════
 # VOLUMES

@@ -206,6 +206,24 @@ CREATE TABLE IF NOT EXISTS projection_customer_loyalty (
 CREATE INDEX IF NOT EXISTS idx_loyalty_tier 
     ON projection_customer_loyalty(membership_tier);
 
+-- Branch metrics projection
+CREATE TABLE IF NOT EXISTS projection_branch_metrics (
+    branch_id TEXT NOT NULL,
+    date DATE NOT NULL,
+    total_transactions INTEGER NOT NULL DEFAULT 0,
+    total_amount DECIMAL(15, 2) NOT NULL DEFAULT 0,
+    compliance_events INTEGER NOT NULL DEFAULT 0,
+    decisions_made INTEGER NOT NULL DEFAULT 0,
+    avg_decision_confidence DECIMAL(5, 4),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (branch_id, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_branch_metrics_date 
+    ON projection_branch_metrics(date);
+CREATE INDEX IF NOT EXISTS idx_branch_metrics_branch 
+    ON projection_branch_metrics(branch_id);
+
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- CRDT STATE STORAGE
 -- ═══════════════════════════════════════════════════════════════════════════════

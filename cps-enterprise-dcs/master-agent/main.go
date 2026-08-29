@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/cps-enterprise/dcs/master-agent/internal/agent"
 	"github.com/cps-enterprise/dcs/master-agent/internal/config"
@@ -66,6 +69,39 @@ func main() {
 		}
 	}()
 
+	healthMux := http.NewServeMux()
+	healthMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":    "healthy",
+			"agent_id":  cfg.AgentID,
+			"region_id": cfg.RegionID,
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
+		})
+	})
+	healthMux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
+		if masterAgent.GetState().String() == "ACTIVE" {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("ready"))
+		} else {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte("not_ready"))
+		}
+	})
+
+	healthServer := &http.Server{
+		Addr:         fmt.Sprintf(":%d", cfg.GRPCPort+1),
+		Handler:      healthMux,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 5 * time.Second,
+	}
+	go func() {
+		logger.Info("Starting health server", zap.String("addr", healthServer.Addr))
+		if err := healthServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("Health server error", zap.Error(err))
+		}
+	}()
+
 	fmt.Printf("╔══════════════════════════════════════════════════════════════╗\n")
 	fmt.Printf("║     CP'S Enterprise DCS - Master Agent                       ║\n")
 	fmt.Printf("║                                                              ║\n")
@@ -85,6 +121,13 @@ func main() {
 		logger.Error("Error during shutdown", zap.Error(err))
 	}
 	grpcServer.Stop()
+	
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := healthServer.Shutdown(shutdownCtx); err != nil {
+		logger.Error("Error shutting down health server", zap.Error(err))
+	}
+	
 	logger.Info("Master Agent shutdown complete")
 }
 

@@ -177,7 +177,6 @@ services:
       DCS_RPC_ADDR: :12000
       DCS_RAFT_ADDR: :12001
       DCS_GRPC_PORT: 50052
-      DCS_POSTGRESQL_URL: postgres://${POSTGRES_USER:-dcs_admin}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-dcs_eventstore}?sslmode=require
       DCS_REDIS_URL: redis:6379
       DCS_BOOTSTRAP: "true"
       DCS_ENV: production

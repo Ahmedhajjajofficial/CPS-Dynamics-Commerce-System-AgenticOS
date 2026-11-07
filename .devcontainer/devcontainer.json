@@ -63,5 +63,5 @@
     }
   },
   "postCreateCommand": "cd /workspaces/cps-dynamics-agenticos && git config --global --add safe.directory /workspaces/cps-dynamics-agenticos && echo 'Dev container ready. Run make install to install all dependencies.'",
-  "postStartCommand": "echo 'CP'\''S Dynamics Commerce System AgenticOS Development Environment is ready.'"
+  "postStartCommand": "echo 'CPS Dynamics Commerce System AgenticOS Development Environment is ready.'"
 }
